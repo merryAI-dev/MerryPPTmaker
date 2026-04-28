@@ -20,6 +20,8 @@ Merry-slide는 Codex 전용 발표자료 제작 워크플로우다. 레퍼런스
 
 여러 stage를 이어서 실행하거나 기존 산출물에서 재개할 때는 `references/stage-contract.md`를 읽는다.
 
+레퍼런스가 있는 덱은 `references/design-quality-gate.md`도 읽는다. 이 파일은 폰트, 본문 크기, 팔레트, 컴포넌트 충실도 검수 기준이다.
+
 ## 내장 도구와 의존성
 
 Merry-slide는 Stage 5를 위해 자체 패키징 도구를 포함한다.
@@ -93,6 +95,40 @@ stage가 애매하면 짧게 한 번만 묻는다. 추천 옵션은 항상 `Auto
 - 레퍼런스 자료: 시각 언어, 레이아웃, 팔레트, 타입, 컴포넌트 규칙
 - 사용자 요청과 원본 파일: 메시지, 사실관계, 스토리, 슬라이드 내용
 
+## 사용자 확인이 필요한 기본값
+
+아래 값이 사용자 요청이나 레퍼런스에서 명확하지 않으면 Stage 0에서 짧게 묻는다. 질문은 한 번에 1-3개만 한다.
+
+- 폰트: 기본 제안은 `Pretendard`
+- 본문 최소 크기: 기본 제안은 `12pt 이상`
+- 산출물: `raster PPTX`인지, 수정 가능한 `native PPTX`인지
+- 렌더 모델: 기본 제안은 `gpt-image-2`
+- 레퍼런스 충실도: “거의 동일한 보고서 톤”인지 “참고만 한 새 톤”인지
+
+사용자가 빠르게 진행하라고 했거나 이미 답을 준 경우에는 묻지 않고 기록한다. 단, 폰트/본문 크기/렌더 모델을 임의로 낮추지 않는다.
+
+## 디자인 충실도 기본값
+
+한국어 덱의 기본 폰트 제안은 `Pretendard`다. 사용자가 확정하면 산출물과 source script에 명시한다. 사용자가 다른 폰트를 요구하면 그 값을 우선한다.
+
+본문 텍스트는 최소 12pt다. 표 본문, 차트 라벨, 다이어그램 설명도 12pt 이상을 기본으로 한다. 예외는 페이지 번호, 출처, 축약 footer 같은 보조 메타데이터뿐이며 8-10pt로 제한한다.
+
+레퍼런스 기반 작업에서 가장 중요한 규칙은 “새로운 시각 문법을 발명하지 않는 것”이다.
+
+- 레퍼런스에 없는 다색 KPI 카드, 무지개식 accent, 두꺼운 윤곽선 카드, 그림자 카드, generic dashboard widget을 만들지 않는다.
+- 팔레트는 레퍼런스에서 관찰된 dominant color와 neutral color를 우선한다. 의미 구분이 필요해도 accent는 1-2개까지만 쓴다.
+- 도식화가 필요하면 레퍼런스의 선, 박스, 표, 여백, 헤더 문법 안에서 만든다.
+- 표와 차트는 레퍼런스가 보여준 밀도와 선 굵기를 따른다. “보기 좋아 보이는” 임의 카드 레이아웃으로 바꾸지 않는다.
+- `fit: shrink`나 작은 글씨로 정보를 밀어 넣지 않는다. 12pt로 안 들어가면 내용을 줄이거나 슬라이드를 나눈다.
+
+Stage 1 Design은 반드시 아래를 기록한다.
+
+- font family와 최소 크기
+- observed palette와 금지 색상
+- observed components: header, footer, table, chart, callout, diagram
+- forbidden patterns: 레퍼런스에 없는 장식/카드/색상/아이콘 스타일
+- body slide density rule: 한 장에 담을 수 있는 최대 표 행, bullet 수, chart 수
+
 ## 기본 Auto 워크플로우
 
 사용 가능한 산출물이 없으면 전체 stage를 실행한다.
@@ -131,11 +167,16 @@ stage가 애매하면 짧게 한 번만 묻는다. 추천 옵션은 항상 `Auto
 - Reference source:
 - Content sources:
 - Requested final output: DESIGN.md | plan | prompts | images | PPTX
+- Typography: font, body minimum size
+- Render model: gpt-image-2 unless user chooses otherwise
+- Editability: raster PPTX | native editable PPTX
 - Assumptions:
 - Missing inputs:
 ```
 
 brief는 실행 정확도를 위한 최소 문서다. 과하게 기획하지 않는다.
+
+Stage 0에서 폰트, 본문 크기, 렌더 모델, 산출물 편집성이 비어 있으면 사용자가 이미 지시한 값과 기본 제안을 함께 적는다. 애매하면 “Pretendard / 본문 12pt 이상 / gpt-image-2 / raster PPTX 기본”으로 진행해도 되는지 묻는다.
 
 ## Stage 1: Design
 
@@ -145,6 +186,7 @@ brief는 실행 정확도를 위한 최소 문서다. 과하게 기획하지 않
 
 - 가장 강한 시각 레퍼런스를 사용한다.
 - 관찰된 규칙과 추론한 규칙을 분리한다.
+- 폰트, 최소 본문 크기, 팔레트 제한, 금지 패턴을 명시한다.
 - title/body/end page 흐름을 잡는다.
 - body slide의 반복 규칙을 명시한다.
 - 표, 차트, 아이콘, 인포그래픽, 다이어그램 규칙을 보이는 범위에서 잡는다.
@@ -176,7 +218,7 @@ brief는 실행 정확도를 위한 최소 문서다. 과하게 기획하지 않
 - 승인된 plan 순서를 유지한다.
 - 이미지 생성기가 오해하지 않을 만큼 구체적으로 쓴다.
 - header/body/footer 배치를 명시한다.
-- slide별 anti-pattern ban을 포함한다.
+- slide별 anti-pattern ban을 포함한다. 금지 패턴은 레퍼런스에 없는 다색 카드, 과한 윤곽선, 작은 본문, 임의 dashboard widget을 포함한다.
 - body slide의 시각 일관성을 유지한다.
 - 사실관계는 사용자 자료에 근거한다.
 
@@ -186,13 +228,16 @@ brief는 실행 정확도를 위한 최소 문서다. 과하게 기획하지 않
 
 `gpt-slide-generate`를 사용한다.
 
-Codex native image generation만 사용한다. 이 스킬 안에서 별도 OpenAI SDK runner를 만들지 않는다. 사용자가 `gpt-image-2`라고 말하면 현재 환경에 실제 모델이 노출되어 있지 않은 한 GPT Image 생성에 대한 사용자식 표현으로만 해석한다.
+기본 렌더 모델은 `gpt-image-2`다. 가능하면 최신 alias인 `gpt-image-2`를 사용하고, 재현성이 더 중요하면 snapshot `gpt-image-2-2026-04-21`을 brief에 기록한다.
+
+Codex native image generation이 모델 선택을 직접 노출하지 않아도 프롬프트와 작업 기록에는 `gpt-image-2` 목표를 명시한다. API runner가 있는 환경에서는 `gpt-image-2`를 사용한다. `gpt-image-1`, `gpt-image-1.5`, DALL-E 계열로 조용히 downgrade하지 않는다. 사용할 수 없으면 fallback 전에 사용자에게 알린다.
 
 필수 기준:
 
 - 한 번에 한 장씩 생성한다.
 - 각 이미지를 받아들기 전에 직접 검수한다.
-- 텍스트가 안 읽히거나, 구성이 깨졌거나, page family가 틀렸거나, 테마가 흔들리면 재생성한다.
+- 텍스트가 안 읽히거나, 본문이 12pt 미만으로 보이거나, 구성이 깨졌거나, page family가 틀렸거나, 테마가 흔들리면 재생성한다.
+- 레퍼런스에 없던 카드/색/장식이 생기면 “스타일 창작”으로 보고 재생성한다.
 - 기본 저장명은 `page_<n>.png`다.
 - 최종 이미지를 generated-images cache에만 두지 않는다.
 
@@ -219,12 +264,14 @@ node scripts/package-raster-pptx.mjs \
 
 완전히 편집 가능한 네이티브 PowerPoint 도형/표가 필요하면 `slides` 스킬로 전환하고, 이미지 기반 Merry-slide와 다른 제작 방식임을 명확히 말한다.
 
+네이티브 PPT를 만들 때도 이 스킬의 디자인 충실도 기본값은 유지한다. `slides` 스킬을 쓰더라도 Pretendard, 본문 12pt 이상, observed palette, forbidden patterns를 source script에 반영한다.
+
 ## 공개/안전 가드레일
 
 - 사용 권한이 있는 레퍼런스만 사용한다.
 - 사용자가 소유 또는 사용 허가를 명시하지 않은 로고, 워터마크, 기밀 라벨, 브랜드 자산은 복제하지 않는다.
 - 검증되지 않은 폰트명을 확정적으로 말하지 않는다.
-- 현재 Codex 환경에 없는 API 모델 지원을 약속하지 않는다.
+- 렌더 모델을 조용히 downgrade하지 않는다. `gpt-image-2`가 실행 환경에서 막히면 먼저 사용자에게 알린다.
 - 사용자가 요청하지 않으면 원본 파일, 내부 메모, 레퍼런스 URL을 최종 산출물에 노출하지 않는다.
 
 ## 완료 보고
