@@ -1,0 +1,57 @@
+# Merry-slide Stage Contract
+
+Merry-slide 작업이 여러 stage를 걸치거나, 기존 산출물에서 재개되거나, 사용자에게 stage 선택지를 보여줘야 할 때 이 문서를 읽는다.
+
+## Stage 완료 기준
+
+| Stage | 완료 조건 |
+| --- | --- |
+| 0 Intake | 목표, 청중, 소스 목록, 디자인 권위, 콘텐츠 권위, 최종 산출물, 누락 입력이 명확하다. |
+| 1 Design | `DESIGN.md`가 observed/inferred 규칙을 분리하고 재사용 가능한 layout family를 명명한다. |
+| 2 Plan | `slide_plan.json`이 유효한 JSON이고, slide 번호가 순차적이며, 근거와 `DESIGN.md`를 반영한다. |
+| 3 Prompt | `slide_prompts.json`이 유효한 JSON이고, 계획된 slide마다 prompt가 있으며, 배치와 anti-pattern ban을 포함한다. |
+| 4 Render | 모든 slide image가 존재하고, 직접 시각 검수됐으며, 의도한 page family를 따른다. |
+| 5 Package | PPTX slide 수가 승인 이미지 수와 같고, 이미지가 slide canvas를 채운다. |
+
+## 재개 규칙
+
+재시작보다 재개를 우선한다.
+
+1. `DESIGN.md`가 없거나 약하면 Stage 1.
+2. `slide_plan.json`이 없거나 invalid면 Stage 2.
+3. `slide_prompts.json`이 없거나 invalid면 Stage 3.
+4. 승인된 page image가 빠졌으면 Stage 4.
+5. 사용자가 PPTX를 원하고 image가 있으면 Stage 5.
+
+상위 산출물이 모순되면 하위 stage를 진행하지 말고 먼저 해당 산출물을 고친다. 깨진 plan을 render에 넘기지 않는다.
+
+## 레퍼런스 링크 처리
+
+레퍼런스 URL은 스타일 판단에 필요한 시각 근거만 캡처한다.
+
+- page/frame/screenshot 위치
+- layout family 단서
+- palette/typography/component 관찰
+- 접근 가능 여부
+
+접근이 실패하면 스크린샷, PDF export, 이미지 crop을 요청한다. 접근 불가능한 링크에서 디자인 규칙을 지어내지 않는다.
+
+## Stage 선택 문구
+
+사용자가 stage를 지정하지 않았고 Auto로 판단하기에도 부족하면 아래 문구를 사용한다.
+
+> 어떤 Merry-slide stage로 진행할까요? 추천은 `Auto`입니다. 옵션:
+> `0 Intake`, `1 Design`, `2 Plan`, `3 Prompt`, `4 Render`, `5 Package`.
+
+사용자가 “완성해줘”, “덱 만들어줘”, “PPT 생성해줘”라고 했거나 충분한 맥락을 줬다면 이 질문을 생략하고 Auto로 진행한다.
+
+## 산출물 기본 이름
+
+- `merry_slide_brief.md`
+- `DESIGN.md`
+- `slide_plan.json`
+- `slide_prompts.json`
+- `page_<n>.png`
+- `merry-slide-deck.pptx`
+
+사용자가 프로젝트별 명명 규칙을 주지 않았다면 파일명은 안정적으로 유지한다.
