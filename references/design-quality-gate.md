@@ -30,7 +30,7 @@
 
 Before planning or rendering, write down:
 
-- Observed layout primitives: header, footer, left rail, grid, table, chart, callout
+- Observed layout primitives: header, footer, rule, rail/marker if observed, grid, table, chart, callout
 - Observed line weight and border style
 - Observed palette: dominant, neutral, accent
 - Observed typography: font family if known, weight, title/body scale
@@ -42,17 +42,17 @@ If font, body minimum size, editability, or render model are not specified, ask 
 
 Stage 1 must also pass `references/design-token-extraction.md`.
 
-Do not accept a `DESIGN.md` that only says “green and gray report style”. The design must be decomposed into role-based tokens.
+Do not accept a `DESIGN.md` that only says “clean report style” or lists color names without roles. The design must be decomposed into role-based tokens.
 
 Required token areas:
 
-- Header: split top rule, segment colors, segment ratio, thickness
-- Rail: primary rail, neutral rail, widths
+- Header: title block, section label, rule/segment treatment if observed, spacing
+- Layout primitives: rail/marker/frame/divider if observed, position, width, relationship to content
 - Table: header fill, grid/border, row fills, text alignment
 - Chart: grid, axis, labels, primary series, secondary series, marker style
 - Footer: footer rule, source note, page number
 
-If the reference visibly contains split green/gray lines, mixed gray/green tables, or gray/green charts, those must appear as explicit token rows with evidence and reuse rules.
+If the reference visibly contains split rules, side rails, mixed table treatments, or recurring chart color roles, those must appear as explicit token rows with evidence and reuse rules. Do not require those elements when the reference does not show them.
 
 ## Native PPT Checklist
 
@@ -75,5 +75,5 @@ Reject and revise any slide that:
 - Has more component types than the reference body pages show.
 - Replaces a reference-style table/chart with decorative cards.
 - Was rendered with a downgraded image model without user approval.
-- Collapses observed green/gray split rules into a single accent color.
+- Collapses observed split rules or repeated multi-role palette behavior into a single generic accent color.
 - Uses table or chart colors without token names and evidence from Stage 1.
