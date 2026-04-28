@@ -38,6 +38,22 @@ Before planning or rendering, write down:
 
 If font, body minimum size, editability, or render model are not specified, ask the user during Intake instead of guessing silently. Recommended defaults are Pretendard, 12pt body minimum, and gpt-image-2.
 
+## Design Token Gate
+
+Stage 1 must also pass `references/design-token-extraction.md`.
+
+Do not accept a `DESIGN.md` that only says “green and gray report style”. The design must be decomposed into role-based tokens.
+
+Required token areas:
+
+- Header: split top rule, segment colors, segment ratio, thickness
+- Rail: primary rail, neutral rail, widths
+- Table: header fill, grid/border, row fills, text alignment
+- Chart: grid, axis, labels, primary series, secondary series, marker style
+- Footer: footer rule, source note, page number
+
+If the reference visibly contains split green/gray lines, mixed gray/green tables, or gray/green charts, those must appear as explicit token rows with evidence and reuse rules.
+
 ## Native PPT Checklist
 
 When using `slides` for editable output:
@@ -59,3 +75,5 @@ Reject and revise any slide that:
 - Has more component types than the reference body pages show.
 - Replaces a reference-style table/chart with decorative cards.
 - Was rendered with a downgraded image model without user approval.
+- Collapses observed green/gray split rules into a single accent color.
+- Uses table or chart colors without token names and evidence from Stage 1.
