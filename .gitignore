@@ -6,3 +6,5 @@ page_*.png
 *-deck.pptx
 merry-slide-deck.pptx
 
+__pycache__/
+*.pyc

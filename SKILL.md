@@ -319,7 +319,8 @@ node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
 지켜야 할 것:
 
 - **`content`를 채운 뒤에 띄운다.** 제목만 있고 본문이 빈 프리뷰는 검토 자료가 아니다.
-- 모든 본문 슬라이드에 `intro` 리드 문단(50~100자)을 넣는다. 빠뜨리지 않는다.
+- 모든 본문 슬라이드에 `intro` 리드 문단(150~200자)을 넣는다. 빠뜨리지 않는다.
+- `introOptions`에 후보를 2~3개 담아 사용자가 프리뷰에서 고르게 한다. 작성 기준은 `references/lead-writing.md`.
 - 빈 공간은 `figure`로 무엇이 들어갈지 명시한다.
 - 형식 이름은 한글로만 노출한다. 내부 키를 사용자에게 보여주지 않는다.
 - 사용자가 확정 파일을 주면 그 파일을 Stage 4A의 입력으로 삼는다. 채팅에서 다시 협의하지 않는다.

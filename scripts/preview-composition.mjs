@@ -40,13 +40,15 @@ function usage() {
   --plan   slide_plan.json 경로. 기본값은 slide_plan.json입니다.
   --out    출력 HTML 경로. 기본값은 ${DEFAULT_OUT}입니다.
   --title  검토 화면 제목입니다.
+  --lead-min  리드 문단 최소 글자수. 기본값 150.
+  --lead-max  리드 문단 최대 글자수. 기본값 200.
 
 장표 형식: ${FORMATS.map((f) => f.name).join(', ')}
 `);
 }
 
 function parseArgs(argv) {
-  const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '' };
+  const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200 };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -58,6 +60,10 @@ function parseArgs(argv) {
       args.out = value || args.out; i += 1;
     } else if (key === '--title') {
       args.title = value || args.title; i += 1;
+    } else if (key === '--lead-min') {
+      args.leadMin = Number.parseInt(value, 10); i += 1;
+    } else if (key === '--lead-max') {
+      args.leadMax = Number.parseInt(value, 10); i += 1;
     } else {
       throw new Error(`알 수 없는 인자입니다: ${key}`);
     }
@@ -190,6 +196,18 @@ function buildHtml(plan, args) {
               min-height:48px; color:var(--ink); }
   .title-in:focus { outline:none; border-color:var(--cyan); box-shadow:0 0 0 3px #59c2e233; }
 
+  .cnt { font-weight:400; font-size:10.5px; padding:1px 6px; border-radius:99px;
+         background:#e9eef5; color:var(--mute); }
+  .cnt.ok { background:#dff3e6; color:#1c7a45; }
+  .cnt.no { background:#fde9e9; color:#a33; }
+  .cands { display:flex; flex-direction:column; gap:5px; margin-bottom:6px; }
+  .cand { text-align:left; font-size:11.5px; line-height:1.5; padding:7px 9px;
+          border:1.5px solid var(--line); border-radius:7px; background:#fff; cursor:pointer;
+          color:#33404f; }
+  .cand:hover { border-color:#b9c4d4; }
+  .cand.on { border-color:var(--cyan); background:#f2fbff; }
+  .cand i { display:block; font-style:normal; font-size:10px; color:var(--mute); margin-top:3px; }
+  .lead-in { font-weight:400; font-size:12px; min-height:62px; }
   .picker { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
   .opt { border:1.5px solid var(--line); border-radius:8px; padding:7px 6px; cursor:pointer;
          background:#fff; text-align:center; }
@@ -238,8 +256,13 @@ function buildHtml(plan, args) {
   <div class="panel">
     <label style="margin-top:0">장표 형식</label>
     <div class="picker" id="picker"></div>
-    <label>제목</label>
+    <label>제목 <span class="cnt" id="tcnt"></span></label>
     <textarea class="title-in" id="title"></textarea>
+    <div id="leadwrap">
+      <label>리드 문단 <span class="cnt" id="icnt"></span></label>
+      <div class="cands" id="cands"></div>
+      <textarea class="title-in lead-in" id="intro"></textarea>
+    </div>
     <div class="nav">
       <button id="prev">←</button>
       <button id="next">→</button>
@@ -412,6 +435,20 @@ function render() {
   fit();
 
   $('title').value = s.title || '';
+
+  // 리드 문단: 후보 중에서 고르거나 직접 고친다. 본문 형식에만 표시한다.
+  const isBody = !['표지', '목차', '간지'].includes(s.layout);
+  $('leadwrap').style.display = isBody ? '' : 'none';
+  if (isBody) {
+    const c = s.content = s.content || {};
+    const opts = c.introOptions || [];
+    $('cands').innerHTML = opts.map((t, k) =>
+      '<button class="cand' + (t === c.intro ? ' on' : '') + '" data-k="' + k + '">' +
+        esc(t) + '<i>' + t.length + '자</i></button>').join('');
+    $('intro').value = c.intro || '';
+    counts();
+  }
+
   $('picker').innerHTML = FORMATS.map(f =>
     '<button class="opt' + (f.name === s.layout ? ' on' : '') + '" data-name="' + esc(f.name) + '">' +
       '<b>' + esc(f.name) + '</b><span>' + esc(f.desc) + '</span></button>').join('');
@@ -426,6 +463,37 @@ function render() {
   $('del').disabled = slides.length <= 1;
 }
 
+/* 글자수 배지. 리드 문단 길이 기준은 CLI 인자로 조정한다. */
+const LEAD_MIN = ${args.leadMin}, LEAD_MAX = ${args.leadMax};
+function counts() {
+  const s = slides[cur], c = s.content || {};
+  const t = (s.title || '').length;
+  $('tcnt').textContent = t + '자';
+  $('tcnt').className = 'cnt';
+  const n = (c.intro || '').length;
+  const el = $('icnt');
+  el.textContent = n + '자 / ' + LEAD_MIN + '~' + LEAD_MAX;
+  el.className = 'cnt ' + (n >= LEAD_MIN && n <= LEAD_MAX ? 'ok' : 'no');
+}
+
+function redrawSlide() {
+  $('slide').innerHTML = renderSlide(slides[cur], cur); fit();
+}
+
+$('cands').addEventListener('click', e => {
+  const b = e.target.closest('[data-k]'); if (!b) return;
+  const c = slides[cur].content;
+  c.intro = (c.introOptions || [])[+b.dataset.k];
+  $('intro').value = c.intro || '';
+  [...$('cands').children].forEach((x, i) => x.classList.toggle('on', i === +b.dataset.k));
+  counts(); redrawSlide();
+});
+$('intro').addEventListener('input', e => {
+  slides[cur].content.intro = e.target.value;
+  [...$('cands').children].forEach(x => x.classList.remove('on'));
+  counts(); redrawSlide();
+});
+
 $('picker').addEventListener('click', e => {
   const b = e.target.closest('[data-name]'); if (!b) return;
   slides[cur].layout = b.dataset.name; render();
@@ -435,8 +503,7 @@ $('strip').addEventListener('click', e => {
   cur = +b.dataset.i; render();
 });
 $('title').addEventListener('input', e => {
-  slides[cur].title = e.target.value;
-  const el = $('slide'); el.innerHTML = renderSlide(slides[cur], cur); fit();
+  slides[cur].title = e.target.value; counts(); redrawSlide();
 });
 $('prev').onclick = () => { cur -= 1; render(); };
 $('next').onclick = () => { cur += 1; render(); };
