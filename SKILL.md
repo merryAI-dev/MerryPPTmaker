@@ -31,6 +31,20 @@ Merry-slide는 Stage 5를 위해 자체 패키징 도구를 포함한다.
 - `scripts/package-raster-pptx.mjs`: `page_<n>.png` 이미지를 full-slide raster PPTX로 조립
 - `scripts/setup-deps.sh`: 스킬 내부 `vendor/`에 Node 의존성 설치
 - `package.json`: 필요한 패키지 선언
+- `components/`: 관찰된 레퍼런스에서 추출한 네이티브 PPTX 컴포넌트 라이브러리
+
+## 구조화 도형은 이미지 생성 대신 컴포넌트를 쓴다
+
+간트/타임라인, 비교 매트릭스, 프로세스 chevron, 정확한 수치가 걸린 표와 stat 그리드처럼 **좌표·정렬·비율이 정확해야 하는 요소**는 이미지 생성 모델이 자주 틀린다(날짜 밀림, 막대 길이 오차, 라벨 겹침).
+
+이런 요소가 필요한 slide는 Stage 4 raster 렌더로 보내지 말고 `components/`의 네이티브 빌더로 만든다. 구조 로직(좌표·비율)만 코드에 고정하고, 색상·폰트는 Stage 1의 `DESIGN.md` 토큰을 주입한다. 레퍼런스에 없는 시각 문법을 발명하지 않는다는 원칙은 그대로 유지된다 — 컴포넌트의 구조는 실제 레퍼런스에서 관찰해 뽑은 것이어야 한다.
+
+현재 포함된 컴포넌트 세트:
+
+- `components/mysc-proposal.mjs`: MYSC 제안서 톤. 표지, 섹션 구분, 본문 헤더 블록, 네이비 pill 소제목, 무배경 stat 그리드, 표, 프로세스 chevron
+- `components/example-mysc-deck.mjs`: 위 컴포넌트 스모크 테스트 겸 사용 예시
+
+근거 토큰은 `references/examples/mysc-2026/tokens.md`에 있다. 다른 톤의 덱을 만들 때는 그 레퍼런스에서 같은 방식으로 토큰을 뽑아 새 컴포넌트 파일을 만든다. MYSC 컴포넌트를 다른 브랜드 덱에 그대로 쓰지 않는다.
 
 패키징 도구는 의존성을 아래 순서로 찾는다.
 

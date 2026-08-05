@@ -1,0 +1,193 @@
+{
+  "slide_count": 32,
+  "slide_width_in": 11.693,
+  "slide_height_in": 8.267,
+  "top_fonts": [
+    [
+      "Pretendard",
+      1860
+    ],
+    [
+      "Pretendard Variable",
+      572
+    ],
+    [
+      "Pretendard Variable Medium",
+      69
+    ],
+    [
+      "Pretendard Light",
+      39
+    ],
+    [
+      "Pretendard SemiBold",
+      24
+    ],
+    [
+      "Pretendard Variable Light",
+      9
+    ],
+    [
+      "Pretendard Variable ExtraLight",
+      6
+    ],
+    [
+      "Pretendard ExtraBold",
+      5
+    ]
+  ],
+  "top_sizes": [
+    [
+      12.0,
+      564
+    ],
+    [
+      9.0,
+      227
+    ],
+    [
+      14.0,
+      224
+    ],
+    [
+      9.7,
+      220
+    ],
+    [
+      10.0,
+      170
+    ],
+    [
+      8.8,
+      167
+    ],
+    [
+      10.8,
+      149
+    ],
+    [
+      9.8,
+      85
+    ],
+    [
+      7.0,
+      80
+    ],
+    [
+      11.9,
+      76
+    ],
+    [
+      8.6,
+      74
+    ],
+    [
+      15.0,
+      73
+    ],
+    [
+      7.8,
+      56
+    ],
+    [
+      10.5,
+      53
+    ],
+    [
+      12.9,
+      51
+    ]
+  ],
+  "top_text_colors": [
+    [
+      "theme:DARK_1 (1)",
+      555
+    ],
+    [
+      "000000",
+      309
+    ],
+    [
+      "theme:BACKGROUND_1 (14)",
+      305
+    ],
+    [
+      "0C2044",
+      92
+    ],
+    [
+      "theme:TEXT_1 (13)",
+      62
+    ],
+    [
+      "59C2E2",
+      57
+    ],
+    [
+      "001D45",
+      52
+    ],
+    [
+      "7F7F7F",
+      39
+    ],
+    [
+      "FFFFFF",
+      31
+    ],
+    [
+      "theme:LIGHT_1 (2)",
+      11
+    ]
+  ],
+  "top_fill_colors": [
+    [
+      "0C2044",
+      44
+    ],
+    [
+      "BEE6FB",
+      40
+    ],
+    [
+      "0070C0",
+      9
+    ],
+    [
+      "59C2E2",
+      9
+    ],
+    [
+      "FADE4B",
+      7
+    ],
+    [
+      "BAE8FB",
+      6
+    ],
+    [
+      "001D45",
+      4
+    ],
+    [
+      "01397E",
+      4
+    ],
+    [
+      "091823",
+      4
+    ],
+    [
+      "C7E6F9",
+      3
+    ],
+    [
+      "F2F2F2",
+      1
+    ],
+    [
+      "FFFF00",
+      1
+    ]
+  ]
+}
