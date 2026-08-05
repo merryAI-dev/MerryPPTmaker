@@ -129,10 +129,13 @@ function buildHtml(plan, args) {
                       border-left:.11in solid var(--navy-mid);
                       border-top:.047in solid transparent; border-bottom:.047in solid transparent; }
 
-  .slide table { border-collapse:collapse; font-size:9.7pt; width:100%; }
+  .slide table { border-collapse:collapse; font-size:9.7pt; width:100%; table-layout:fixed; }
   .slide th, .slide td { border:.5pt solid #D9D9D9; padding:.055in .08in; }
-  .slide th { background:var(--tint); color:var(--navy); font-weight:700; text-align:center; }
-  .slide td:first-child { font-weight:600; background:#f7fbfe; white-space:nowrap; }
+  /* 헤더는 라벨 띠다. 한 줄 높이로 고정하고 여백을 최소화한다.
+     레퍼런스 실측 헤더 행 중앙값 0.275in. 남는 세로 공간은 본문 행이 흡수한다. */
+  .slide thead th { background:var(--tint); color:var(--navy); font-weight:700; text-align:center;
+                    height:.275in; padding:.03in .08in; line-height:1.25; }
+  .slide tbody td:first-child { font-weight:600; background:#f7fbfe; }
 
   /* 본문 리드 문단: 레퍼런스 21개 본문 슬라이드 전부에 있는 y=1.503 / 12pt / 10.336in 문단 */
   .slide .intro { position:absolute; left:.669in; top:1.46in; width:10.336in; font-size:12pt;
@@ -368,9 +371,10 @@ function renderSlide(s, i) {
     const th = BOT - CT - (c.note ? 0.62 : 0);
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:' + tw + 'in">' + esc(c.pill || '') + '</div>' +
       '<div style="position:absolute;left:.649in;top:' + CT + 'in;width:' + tw + 'in;height:' + th + 'in">' +
-        '<table style="height:100%"><tr>' +
-        (t.headers || []).map(h => '<th>' + esc(h) + '</th>').join('') + '</tr>' +
-        (t.rows || []).map(r => '<tr>' + r.map(x => '<td>' + esc(x) + '</td>').join('') + '</tr>').join('') +
+        '<table style="height:100%">' +
+        '<thead><tr>' + (t.headers || []).map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>' +
+        '<tbody>' + (t.rows || []).map(r =>
+          '<tr>' + r.map(x => '<td>' + esc(x) + '</td>').join('') + '</tr>').join('') + '</tbody>' +
         '</table></div>' +
       figure(c.figure, 'left:7.75in;top:' + CT + 'in;width:3.27in;height:' + th + 'in') +
       (c.note ? '<div class="note" style="top:' + (BOT - 0.5) + 'in">' + esc(c.note) + '</div>' : '');
