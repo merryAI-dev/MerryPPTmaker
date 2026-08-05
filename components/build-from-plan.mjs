@@ -1,0 +1,492 @@
+#!/usr/bin/env node
+/**
+ * 확정된 slide_plan.json을 편집 가능한 PPTX로 조립한다. (Stage 4A)
+ *
+ * CP3 프리뷰에서 내려받은 `slide_plan.confirmed.json`을 그대로 입력으로 받는다.
+ * 프리뷰에서 본 배치와 같은 좌표를 쓰므로 확정한 모습이 그대로 덱이 된다.
+ *
+ *   node components/build-from-plan.mjs --plan slide_plan.confirmed.json --out deck.pptx
+ *
+ * 형식별 content 구조는 references/composition-format.md 참고.
+ * 표·텍스트·도형은 PowerPoint 네이티브 객체로 남아 사용자가 직접 수정할 수 있다.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { applyLayout, coverSlide, sectionDivider, T, ASSET_DIR } from './mysc-proposal.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const SKILL_DIR = path.resolve(HERE, '..');
+const DEFAULT_OUT = 'merry-slide-deck.pptx';
+
+/** 프리뷰와 동일한 세로 기준선 */
+const L = {
+  band: T.header.bandH,
+  // 리드 문단은 150~200자라 12pt/10.336in에서 3~4줄이 기본이다.
+  intro: { x: 0.669, y: 1.46, w: 10.336, h: 0.86 },
+  pillTop: 2.42,          // 리드 문단이 있을 때
+  pillTopBare: 1.72,      // 없을 때
+  bottom: 7.62,
+  col: { left: 0.649, right: 5.954, w: 5.095 },
+  full: { x: 0.649, w: 10.37 },
+};
+
+function usage() {
+  console.log(`사용법:
+  node build-from-plan.mjs --plan slide_plan.confirmed.json --out deck.pptx
+
+옵션:
+  --plan   확정된 slide_plan JSON 경로. 생략하면 현재 폴더와 ~/Downloads에서
+           slide_plan.confirmed.json을 자동으로 찾습니다.
+  --out    출력 .pptx 경로. 기본값은 ${DEFAULT_OUT}입니다.
+  --title  덱 메타데이터 제목. 없으면 plan의 title을 씁니다.
+
+지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름
+`);
+}
+
+/**
+ * 확정 파일을 알아서 찾는다.
+ *
+ * 프리뷰의 `확정 저장`은 브라우저 다운로드라 보통 ~/Downloads에 떨어진다.
+ * 사용자가 파일을 옮기거나 경로를 알려주지 않아도 되도록 여기서 찾는다.
+ */
+function discoverPlan(explicit) {
+  if (explicit) return explicit;
+  const home = process.env.HOME || '';
+  const candidates = [
+    path.join(process.cwd(), 'slide_plan.confirmed.json'),
+    path.join(home, 'Downloads', 'slide_plan.confirmed.json'),
+    path.join(process.cwd(), 'slide_plan.json'),
+  ].filter(Boolean);
+
+  const found = candidates
+    .filter((p) => fs.existsSync(p))
+    .map((p) => ({ p, mtime: fs.statSync(p).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+
+  if (!found.length) {
+    throw new Error([
+      'slide_plan을 찾을 수 없습니다.',
+      '프리뷰에서 "확정 저장"을 눌렀는지 확인하거나 --plan으로 경로를 지정하세요.',
+      `확인한 위치: ${candidates.join(' / ')}`,
+    ].join(' '));
+  }
+  return found[0].p;
+}
+
+function parseArgs(argv) {
+  const args = { plan: '', out: DEFAULT_OUT, title: '' };
+  for (let i = 0; i < argv.length; i += 1) {
+    const key = argv[i];
+    const value = argv[i + 1];
+    if (key === '--help' || key === '-h') {
+      args.help = true;
+    } else if (key === '--plan') {
+      args.plan = value || args.plan; i += 1;
+    } else if (key === '--out') {
+      args.out = value || args.out; i += 1;
+    } else if (key === '--title') {
+      args.title = value || args.title; i += 1;
+    } else {
+      throw new Error(`알 수 없는 인자입니다: ${key}`);
+    }
+  }
+  return args;
+}
+
+function loadPptxGenJS() {
+  const attempts = [
+    () => createRequire(path.join(process.cwd(), 'package.json'))('pptxgenjs'),
+    () => createRequire(path.join(SKILL_DIR, 'vendor', 'package.json'))('pptxgenjs'),
+    () => createRequire(path.join(SKILL_DIR, 'package.json'))('pptxgenjs'),
+  ];
+  for (const attempt of attempts) {
+    try {
+      return attempt();
+    } catch { /* 다음 후보 */ }
+  }
+  throw new Error('pptxgenjs를 찾을 수 없습니다. 먼저 bash scripts/setup-deps.sh를 실행하세요.');
+}
+
+/* ── 본문 슬라이드 공통 요소 ─────────────────────────────────── */
+
+/** 헤더 밴드 + 대분류 + 쪽수 + 제목줄 + 구분선 + 리드 문단 */
+function chrome(pptx, slide, s, index) {
+  const c = s.content || {};
+
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0, y: 0, w: T.canvas.w, h: L.band,
+    fill: { color: T.color.headerBandTo }, line: { type: 'none' },
+  });
+
+  if (c.section) {
+    slide.addText(c.section, {
+      x: 0.657, y: 0.42, w: 2.4, h: 0.328,
+      fontFace: T.font.family, fontSize: 15, bold: true, color: T.color.white,
+      valign: 'middle', margin: 0,
+    });
+  }
+
+  slide.addText(`${String(index + 1).padStart(2, '0')} 쪽`, {
+    x: 9.9, y: 0.505, w: 1.18, h: 0.26,
+    fontFace: T.font.family, fontSize: 10, bold: true, color: T.color.white,
+    align: 'right', valign: 'middle', margin: 0,
+  });
+
+  const lead = [];
+  if (c.label) {
+    lead.push({ text: c.label, options: { color: T.color.cyanLabel, bold: true } });
+    lead.push({ text: ' ｜ ', options: { color: T.color.navyMid, bold: true } });
+  }
+  lead.push({ text: s.title || '', options: { color: T.color.navy, bold: true } });
+  slide.addText(lead, {
+    x: 0.55, y: 0.9, w: 10.45, h: 0.42,
+    fontFace: T.font.family, fontSize: 14.5, valign: 'middle', margin: 0,
+  });
+
+  slide.addShape(pptx.ShapeType.line, {
+    x: T.header.rule.x, y: T.header.rule.y, w: T.header.rule.w, h: 0,
+    line: { color: T.color.rule, width: T.header.rule.pt },
+  });
+
+  if (c.intro) {
+    slide.addText(c.intro, {
+      x: L.intro.x, y: L.intro.y, w: L.intro.w, h: L.intro.h,
+      fontFace: T.font.family, fontSize: 12, color: '1A2233',
+      lineSpacingMultiple: 1.35, valign: 'top', margin: 0,
+    });
+  }
+}
+
+/** 네이비 pill 소제목 */
+function pill(pptx, slide, text, x, y, w) {
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x, y, w, h: T.pill.h,
+    fill: { color: T.color.navy }, line: { type: 'none' }, rectRadius: T.pill.radius,
+  });
+  slide.addText(text || '', {
+    x, y, w, h: T.pill.h,
+    fontFace: T.font.family, fontSize: 12, color: T.color.white,
+    align: 'center', valign: 'middle', margin: 0,
+  });
+}
+
+/** 삼각형 마커 불릿. 레퍼런스는 원형 불릿 대신 작은 삼각형을 쓴다. */
+function bullets(slide, items, x, y, w, h) {
+  const list = (items || []).filter(Boolean);
+  if (!list.length) return;
+  slide.addText(
+    list.map((t, i) => ({
+      text: t,
+      options: { breakLine: i < list.length - 1, bullet: { code: '25B8' } },
+    })),
+    {
+      x, y, w, h,
+      fontFace: T.font.family, fontSize: 12, color: '1A2233',
+      lineSpacingMultiple: 1.25, paraSpaceAfter: 6, valign: 'top', margin: 0,
+    },
+  );
+}
+
+/** 하단 보조 설명 */
+function note(slide, text, y) {
+  if (!text) return;
+  slide.addText(text, {
+    x: L.full.x, y, w: L.full.w, h: 0.5,
+    fontFace: T.font.family, fontSize: 10, color: '5B6678',
+    lineSpacingMultiple: 1.3, valign: 'top', margin: 0,
+  });
+}
+
+/** 이미지가 들어갈 자리. 실제 이미지를 넣기 전까지 무엇이 올지 표시한다. */
+function figureBox(pptx, slide, fig, x, y, w, h) {
+  if (!fig || h <= 0.2) return;
+  slide.addShape(pptx.ShapeType.roundRect, {
+    x, y, w, h,
+    fill: { color: 'F4F8FC' },
+    line: { color: '9FB4CC', width: 1, dashType: 'dash' },
+    rectRadius: 0.06,
+  });
+  const runs = [{ text: fig.caption || '이미지', options: { fontSize: 10.5, bold: true } }];
+  if (fig.hint) runs.push({ text: `\n${fig.hint}`, options: { fontSize: 9.5, color: '7B8EA3' } });
+  slide.addText(runs, {
+    x, y, w, h,
+    fontFace: T.font.family, color: '5B7A99',
+    align: 'center', valign: 'middle', margin: 0,
+  });
+}
+
+/* ── 형식별 조립 ─────────────────────────────────────────────── */
+
+function twoColumn(pptx, slide, c, PT, CT) {
+  const side = (s, x) => {
+    if (!s) return;
+    pill(pptx, slide, s.pill, x, PT, L.col.w);
+    const bodyH = s.figure ? 2.1 : L.bottom - CT;
+    bullets(slide, s.body, x, CT, L.col.w, bodyH);
+    if (s.figure) {
+      figureBox(pptx, slide, s.figure, x, CT + bodyH + 0.12, L.col.w,
+        L.bottom - CT - bodyH - 0.12);
+    }
+  };
+  side(c.left, L.col.left);
+  side(c.right, L.col.right);
+}
+
+function tableSlide(pptx, slide, c, PT, CT) {
+  const t = c.table || { headers: [], rows: [] };
+  const tw = c.figure ? 6.9 : L.full.w;
+  const th = L.bottom - CT - (c.note ? 0.62 : 0);
+  pill(pptx, slide, c.pill, L.full.x, PT, tw);
+
+  const cols = (t.headers || []).length || 1;
+  const head = (t.headers || []).map((h) => ({
+    text: String(h),
+    options: { fill: { color: T.color.cyanTint }, bold: true, color: T.color.navy, align: 'center' },
+  }));
+  const body = (t.rows || []).map((r) => r.map((x, i) => ({
+    text: String(x),
+    options: i === 0 ? { bold: true, fill: { color: 'F7FBFE' } } : {},
+  })));
+
+  // 헤더는 한 줄로 고정하고 남는 높이는 본문 행이 흡수한다.
+  const headH = 0.275;
+  const bodyH = Math.max(0.2, (th - headH) / Math.max(body.length, 1));
+
+  slide.addTable([head, ...body], {
+    x: L.full.x, y: CT, w: tw,
+    colW: Array.from({ length: cols }, () => tw / cols),
+    rowH: [headH, ...body.map(() => bodyH)],
+    fontFace: T.font.family, fontSize: T.font.dense,
+    border: { type: 'solid', color: 'D9D9D9', pt: 0.5 },
+    valign: 'middle', margin: 3,
+  });
+
+  if (c.figure) figureBox(pptx, slide, c.figure, 7.75, CT, 3.27, th);
+  note(slide, c.note, L.bottom - 0.5);
+}
+
+function diagramSlide(pptx, slide, c, PT, CT) {
+  const flow = c.flow || [];
+  pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
+  // 상단 정렬이라 박스가 너무 높으면 속이 비어 보인다. 3.2in로 제한한다.
+  const flowH = c.figure ? 2.3 : Math.min(3.2, L.bottom - CT - (c.note ? 0.9 : 0));
+
+  if (flow.length) {
+    const gap = 0.16;
+    const each = (L.full.w - gap * (flow.length - 1)) / flow.length;
+    flow.forEach((b, i) => {
+      const x = L.full.x + i * (each + gap);
+      slide.addShape(pptx.ShapeType.roundRect, {
+        x, y: CT, w: each, h: flowH,
+        fill: { color: 'FBFDFF' }, line: { color: 'CFD8E5', width: 1 }, rectRadius: 0.06,
+      });
+      slide.addText(
+        [
+          { text: b.head || '', options: { fontSize: 10.5, bold: true, color: T.color.navy, breakLine: true } },
+          { text: b.body || '', options: { fontSize: 11, color: '28313F' } },
+        ],
+        {
+          x: x + 0.1, y: CT + 0.1, w: each - 0.2, h: flowH - 0.2,
+          fontFace: T.font.family, lineSpacingMultiple: 1.2, valign: 'top', margin: 0,
+        },
+      );
+      // 레퍼런스에 화살표 커넥터가 없으므로 선이 아니라 문자로 방향만 표시한다.
+      if (i < flow.length - 1) {
+        slide.addText('›', {
+          x: x + each, y: CT, w: gap, h: flowH,
+          fontFace: T.font.family, fontSize: 18, bold: true, color: T.color.cyan,
+          align: 'center', valign: 'middle', margin: 0,
+        });
+      }
+    });
+  }
+
+  if (c.figure) {
+    figureBox(pptx, slide, c.figure, L.full.x, CT + flowH + 0.16, L.full.w,
+      L.bottom - CT - flowH - 0.16 - (c.note ? 0.75 : 0));
+  }
+  note(slide, c.note, L.bottom - 0.6);
+}
+
+function stepsSlide(pptx, slide, c, PT, CT) {
+  const steps = c.steps || [];
+  pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
+
+  if (steps.length) {
+    const gap = 0.07;
+    const each = (L.full.w - gap * (steps.length - 1)) / steps.length;
+    steps.forEach((label, i) => {
+      const x = L.full.x + i * (each + gap);
+      slide.addShape(pptx.ShapeType.homePlate, {
+        x, y: CT, w: each, h: 1.5,
+        fill: { color: T.color.cyan }, line: { type: 'none' },
+      });
+      slide.addText(String(label), {
+        x, y: CT, w: each, h: 1.5,
+        fontFace: T.font.family, fontSize: 10.5, bold: true, color: T.color.navy,
+        align: 'center', valign: 'middle', margin: 0,
+      });
+    });
+  }
+
+  if (c.figure) {
+    figureBox(pptx, slide, c.figure, L.full.x, CT + 1.66, L.full.w,
+      L.bottom - CT - 1.66 - (c.note ? 0.85 : 0));
+  }
+  note(slide, c.note, L.bottom - 0.7);
+}
+
+function statsSlide(pptx, slide, c, PT, CT) {
+  const stats = c.stats || [];
+  pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
+
+  const gap = L.full.w / Math.max(stats.length, 1);
+  stats.forEach((s, i) => {
+    const x = L.full.x + i * gap;
+    const w = gap - 0.2;
+    slide.addText(s.label || '', {
+      x, y: CT, w, h: 0.4,
+      fontFace: T.font.family, fontSize: T.font.statLabel, color: '000000',
+      valign: 'bottom', margin: 0,
+    });
+    const runs = [{ text: String(s.value ?? ''), options: { fontSize: T.font.statNumber, bold: true } }];
+    if (s.unit) runs.push({ text: ` ${s.unit}`, options: { fontSize: T.font.statLabel } });
+    if (s.note) runs.push({ text: ` (${s.note})`, options: { fontSize: T.font.statNote } });
+    slide.addText(runs, {
+      x, y: CT + 0.42, w, h: 0.72,
+      fontFace: T.font.family, color: '000000', valign: 'top', margin: 0,
+    });
+  });
+
+  if (c.figure) {
+    figureBox(pptx, slide, c.figure, L.full.x, CT + 1.32, L.full.w,
+      L.bottom - CT - 1.32 - (c.note ? 0.85 : 0));
+  }
+  note(slide, c.note, L.bottom - 0.7);
+}
+
+function tocSlide(pptx, s) {
+  const slide = pptx.addSlide();
+  slide.background = { color: T.color.white };
+  slide.addText(s.title || '목차', {
+    x: 3.2, y: 0.8, w: 4, h: 0.8,
+    fontFace: T.font.family, fontSize: 32, bold: true, color: T.color.navy, margin: 0,
+  });
+  const items = (s.content || {}).items || [];
+  items.forEach((t, i) => {
+    const y = 1.9 + i * 0.62;
+    slide.addText(String(i + 1), {
+      x: 3.3, y, w: 0.5, h: 0.5,
+      fontFace: T.font.family, fontSize: 18, bold: true, color: T.color.cyan,
+      valign: 'middle', margin: 0,
+    });
+    slide.addText(t, {
+      x: 3.9, y, w: 5.3, h: 0.5,
+      fontFace: T.font.family, fontSize: 16, bold: true, color: T.color.navyDeep,
+      valign: 'middle', margin: 0,
+    });
+    slide.addShape(pptx.ShapeType.line, {
+      x: 3.2, y: y + 0.5, w: 6, h: 0,
+      line: { color: 'DBE4EE', width: 0.5 },
+    });
+  });
+  return slide;
+}
+
+/* ── 조립 ────────────────────────────────────────────────────── */
+
+function buildSlide(pptx, s, index) {
+  const c = s.content || {};
+  const f = s.layout;
+
+  if (f === '표지') {
+    return coverSlide(pptx, {
+      title: s.title, subtitle: c.subtitle, entity: c.entity,
+    });
+  }
+  if (f === '목차') return tocSlide(pptx, s);
+  if (f === '간지') {
+    return sectionDivider(pptx, { numeral: c.numeral, title: s.title, items: c.items });
+  }
+
+  const slide = pptx.addSlide();
+  slide.background = { color: T.color.white };
+  chrome(pptx, slide, s, index);
+
+  const PT = c.intro ? L.pillTop : L.pillTopBare;
+  const CT = PT + 0.44;
+
+  if (f === '좌우 2단') twoColumn(pptx, slide, c, PT, CT);
+  else if (f === '표 중심') tableSlide(pptx, slide, c, PT, CT);
+  else if (f === '전폭 도식') diagramSlide(pptx, slide, c, PT, CT);
+  else if (f === '단계 흐름') stepsSlide(pptx, slide, c, PT, CT);
+  else if (f === '숫자 강조') statsSlide(pptx, slide, c, PT, CT);
+  else {
+    slide.addText(`지원하지 않는 형식입니다: ${f}`, {
+      x: L.full.x, y: CT, w: L.full.w, h: 0.5,
+      fontFace: T.font.family, fontSize: 12, color: 'A33333', margin: 0,
+    });
+  }
+  return slide;
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    usage();
+    return;
+  }
+  const planPath = discoverPlan(args.plan);
+  if (!fs.existsSync(planPath)) {
+    throw new Error(`slide_plan을 찾을 수 없습니다: ${planPath}`);
+  }
+
+  let plan;
+  try {
+    plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
+  } catch (error) {
+    throw new Error(`slide_plan 파싱에 실패했습니다: ${error.message}`);
+  }
+  if (!Array.isArray(plan.slides) || !plan.slides.length) {
+    throw new Error('slide_plan에 slides 배열이 없습니다.');
+  }
+
+  const assetsMissing = !fs.existsSync(path.join(ASSET_DIR, 'mysc-logo.png'));
+  if (assetsMissing) {
+    throw new Error(`브랜드 에셋을 찾을 수 없습니다: ${ASSET_DIR}`);
+  }
+
+  const PptxGenJS = loadPptxGenJS();
+  const pptx = new PptxGenJS();
+  applyLayout(pptx);
+  const title = args.title || plan.title || 'Merry-slide deck';
+  pptx.title = title;
+  pptx.subject = title;
+  pptx.author = 'Merry-slide';
+
+  const unsupported = [];
+  plan.slides.forEach((s, i) => {
+    buildSlide(pptx, s, i);
+    const known = ['표지', '목차', '간지', '좌우 2단', '표 중심', '전폭 도식', '숫자 강조', '단계 흐름'];
+    if (!known.includes(s.layout)) unsupported.push({ number: i + 1, layout: s.layout });
+  });
+
+  const outPath = path.resolve(args.out);
+  await pptx.writeFile({ fileName: outPath });
+
+  console.log(JSON.stringify({
+    output: outPath,
+    plan: planPath,
+    slides: plan.slides.length,
+    canvas: T.canvas,
+    unsupported,
+  }, null, 2));
+}
+
+main().catch((error) => {
+  console.error(`build-from-plan.mjs: ${error.message}`);
+  process.exit(1);
+});

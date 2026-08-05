@@ -346,7 +346,17 @@ node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
 
 ## Stage 4A: Build (Native 트랙)
 
-`components/`의 빌더로 슬라이드를 조립하는 스크립트를 작성한다. `components/example-mysc-deck.mjs`가 참고 예시다.
+CP3에서 확정한 구성이 있으면 스크립트를 새로 짜지 말고 빌더를 그대로 돌린다.
+
+```bash
+node components/build-from-plan.mjs --out deck.pptx
+```
+
+`--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾는다. 사용자에게 파일 경로를 묻거나 내용을 붙여달라고 하지 않는다. 프리뷰에서 `확정 저장`을 누른 뒤 바로 이 명령을 실행하면 된다.
+
+빌더는 `references/composition-format.md`의 8종 형식을 모두 그리며, 프리뷰와 같은 좌표를 쓰므로 확정한 모습이 그대로 덱이 된다. 표·텍스트·도형은 PowerPoint 네이티브 객체로 남는다.
+
+새 컴포넌트가 필요할 때만 직접 스크립트를 작성한다. `components/example-mysc-deck.mjs`가 참고 예시다.
 
 필수 기준:
 
@@ -365,7 +375,16 @@ soffice --headless --convert-to pdf deck.pptx
 pdftoppm -jpeg -r 110 deck.pdf slide
 ```
 
-렌더된 이미지를 직접 열어 텍스트 잘림, 도형 겹침, 여백 불균형, 정렬 어긋남을 확인한다. 문제가 있으면 빌더를 고치고 다시 렌더한다.
+렌더된 이미지를 직접 열어 확인한다. 실제로 반복해서 나온 결함들이다.
+
+- **리드 문단 잘림**: 150~200자는 12pt에서 3~4줄이다. 텍스트 상자 높이가 모자라면 다음 요소에 가린다.
+- **헤더 행이 본문 행만큼 큼**: 표 전체 높이를 지정하고 행을 균등 분배하면 생긴다. 헤더는 한 줄로 고정한다.
+- **도형 속이 텅 빔**: 박스를 세로로 크게 잡고 텍스트를 위에 붙이면 아래가 빈다. 박스 높이를 줄이거나 내용을 늘린다.
+- **세로 가운데 정렬로 어긋남**: 여러 박스를 나란히 둘 때 내용 길이가 다르면 시작점이 제각각이 된다. 비교용 도형은 상단 정렬이 낫다.
+- **라벨이 pill에 붙음**: pill 바로 아래에 텍스트를 두면 숨이 막힌다. 간격을 준다.
+- **하단이 통째로 빔**: 콘텐츠를 상단에 몰지 않는다. 채우거나 옆 장과 합친다.
+
+문제가 있으면 빌더를 고치고 다시 렌더한다. 고친 뒤에는 프리뷰도 같은 좌표로 맞춘다. 둘이 어긋나면 확정한 모습과 결과가 달라진다.
 
 ## Stage 4B: Render (Raster 트랙)
 

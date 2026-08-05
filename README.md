@@ -131,7 +131,17 @@ node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
 
 "3번은 2단으로, 7번은 표로" 같은 왕복이 없어져 토큰이 줄고 해석 차이도 생기지 않습니다. 형식은 그림과 한글 이름으로만 고르며 내부 키는 노출되지 않습니다.
 
-장표 형식과 `slide_plan.json` 구조는 [references/composition-format.md](references/composition-format.md)에 있습니다. 본문 슬라이드에는 그 페이지 전체를 설명하는 **리드 문단(50~100자)** 이 반드시 들어갑니다.
+장표 형식과 `slide_plan.json` 구조는 [references/composition-format.md](references/composition-format.md)에 있습니다. 본문 슬라이드에는 그 페이지 전체를 설명하는 **리드 문단(150~200자)** 이 반드시 들어가며, 후보를 여러 개 담아 프리뷰에서 골라 쓸 수 있습니다.
+
+### 확정한 구성이 그대로 PPT가 됩니다
+
+```bash
+node components/build-from-plan.mjs --out deck.pptx
+```
+
+`--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾습니다. 프리뷰에서 `확정 저장`을 누른 뒤 이 명령만 실행하면 되고, 파일을 옮기거나 경로를 알려줄 필요가 없습니다.
+
+프리뷰와 같은 좌표를 쓰므로 확정한 모습이 그대로 덱이 됩니다. 표·텍스트·도형은 PowerPoint 네이티브 객체로 남아 직접 수정할 수 있습니다.
 
 ## 설치
 

@@ -138,8 +138,8 @@ function buildHtml(plan, args) {
   .slide tbody td:first-child { font-weight:600; background:#f7fbfe; }
 
   /* 본문 리드 문단: 레퍼런스 21개 본문 슬라이드 전부에 있는 y=1.503 / 12pt / 10.336in 문단 */
-  .slide .intro { position:absolute; left:.669in; top:1.46in; width:10.336in; font-size:12pt;
-                  line-height:1.6; color:#1a2233; }
+  .slide .intro { position:absolute; left:.669in; top:1.46in; width:10.336in; height:.86in;
+                  font-size:12pt; line-height:1.35; color:#1a2233; overflow:hidden; }
   .slide .note { position:absolute; left:.649in; width:10.37in; font-size:10pt; color:#5b6678;
                  line-height:1.55; }
   .slide .fig { position:absolute; border:1pt dashed #9fb4cc; border-radius:.06in;
@@ -150,7 +150,8 @@ function buildHtml(plan, args) {
   .slide .fig span { font-size:9.5pt; color:#7b8ea3; }
   .slide .flow { position:absolute; display:flex; align-items:stretch; gap:.16in; }
   .slide .fbox { flex:1; border:1pt solid #cfd8e5; border-radius:.06in; padding:.13in;
-                 display:flex; flex-direction:column; gap:.07in; background:#fbfdff; }
+                 display:flex; flex-direction:column; gap:.07in; background:#fbfdff;
+ }
   .slide .fbox b { font-size:10.5pt; color:var(--navy); }
   .slide .fbox p { margin:0; font-size:11pt; line-height:1.45; white-space:pre-line; color:#28313f; }
   .slide .farrow { align-self:center; color:var(--cyan); font-size:18pt; font-weight:700; }
@@ -348,7 +349,7 @@ function renderSlide(s, i) {
   /* 본문 슬라이드: 크롬 + 리드 문단. 콘텐츠는 2.18in부터 7.62in까지 채운다. */
   let inner = chrome(s, i) +
     (c.intro ? '<div class="intro">' + lines(c.intro) + '</div>' : '');
-  const PT = c.intro ? 2.18 : 1.72;   // pill top
+  const PT = c.intro ? 2.42 : 1.72;   // pill top (리드 문단 3~4줄 수용)
   const CT = PT + 0.44;               // content top
   const BOT = 7.62;                   // 콘텐츠 하단 한계
 
@@ -383,7 +384,7 @@ function renderSlide(s, i) {
     const boxes = fl.map((b, k) =>
       (k ? '<span class="farrow">›</span>' : '') +
       '<div class="fbox"><b>' + esc(b.head) + '</b><p>' + lines(b.body) + '</p></div>').join('');
-    const flowH = c.figure ? 2.3 : (BOT - CT - (c.note ? 0.9 : 0));
+    const flowH = c.figure ? 2.3 : Math.min(3.2, BOT - CT - (c.note ? 0.9 : 0));
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + flowH + 'in">' + boxes + '</div>' +
       figure(c.figure, 'left:.649in;top:' + (CT + flowH + 0.16) + 'in;width:10.37in;height:' +
@@ -402,7 +403,7 @@ function renderSlide(s, i) {
     const gap = 10.37 / Math.max(arr.length, 1);
     const sts = arr.map((x, k) =>
       '<div class="stat" style="left:' + (0.649 + k * gap) + 'in;top:' + CT + 'in;width:' + (gap - 0.2) + 'in">' +
-        '<div class="sl">' + esc(x.label) + '</div>' +
+        '<div class="sl" style="height:.4in">' + esc(x.label) + '</div>' +
         '<div><span class="sv">' + esc(x.value) + '</span><span class="su"> ' + esc(x.unit || '') + '</span>' +
         (x.note ? '<span class="sn">(' + esc(x.note) + ')</span>' : '') + '</div></div>').join('');
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
