@@ -93,23 +93,69 @@ node components/example-mysc-deck.mjs --out sample.pptx
 
 사용자가 "수정 가능한 표", "native chart", "PowerPoint에서 직접 고치게"를 요구하면 `slides` 스킬로 전환합니다. native PPT 기준(테마 폰트, 12pt 이상, native table/chart, 관찰된 split rule 구현, 토큰 기반 색상)은 `references/design-quality-gate.md`의 "Native PPT Checklist"를 따릅니다.
 
+## 두 가지 트랙
+
+Stage 4에서 트랙이 갈립니다. Stage 0~3과 5는 공통입니다.
+
+| 트랙 | 방식 | 산출물 | 실행 환경 |
+| --- | --- | --- | --- |
+| **Native** (기본) | `components/`의 PptxGenJS 빌더로 슬라이드를 직접 조립 | 편집 가능한 PPTX | Claude, Codex 모두 |
+| **Raster** | 이미지 생성 모델로 페이지를 렌더 | `page_<n>.png` → raster PPTX | 이미지 생성이 가능한 환경 |
+
+제안서처럼 표와 수치가 많은 덱은 Native가 낫습니다. 이미지 생성 모델은 표 정렬과 숫자를 자주 틀리고, 발표 직전 문구를 고쳐야 할 때 통째로 다시 렌더해야 합니다. Native는 표·텍스트·도형이 PowerPoint 객체로 남아 사용자가 직접 수정합니다.
+
+Claude Code에는 이미지 생성 도구가 없으므로 Native 트랙만 사용합니다.
+
+## 사람이 결정하는 지점
+
+이 저장소는 덱을 대신 만들어 주는 자동화가 아니라, **사람이 판단할 지점을 정해 놓은 작업 흐름**입니다. 네 곳에서 멈추고 확인받습니다.
+
+| 체크포인트 | 언제 | 물을 것 |
+| --- | --- | --- |
+| CP1 기본값 | Stage 0 끝 | 폰트, 본문 크기, 트랙, 레퍼런스 충실도 |
+| CP2 디자인 시스템 | Stage 1 끝 | 톤이 맞는지, 빠진 관찰이 있는지 |
+| CP3 스토리와 장수 | Stage 2 끝 | 순서, 장수, 각 장의 형식, 뺄 내용 |
+| CP4 시각 검수 | Stage 4 렌더 후 | 배치, 밀도, 톤이 의도대로인지 |
+
+특히 장수, 강조할 메시지, 뺄 내용, 레퍼런스 충실도는 모델이 혼자 정하지 않습니다. 자료에 근거가 없는 사실은 지어내지 않고 빈칸으로 두고 무엇이 필요한지 말합니다.
+
+### CP3은 프리뷰로 확정합니다
+
+Stage 2가 끝나면 채팅으로 목록을 나열하는 대신 구성 프리뷰를 띄웁니다.
+
+```bash
+node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
+```
+
+와이어프레임이 아니라 **실제 문구가 들어간 슬라이드**가 렌더됩니다. 한 장씩 넘기며 형식을 고르고, 제목을 고치고, 순서를 바꾼 뒤 `확정 저장`을 누르면 `slide_plan.confirmed.json`이 저장되고, 그 파일이 그대로 PPT 생성 입력이 됩니다.
+
+"3번은 2단으로, 7번은 표로" 같은 왕복이 없어져 토큰이 줄고 해석 차이도 생기지 않습니다. 형식은 그림과 한글 이름으로만 고르며 내부 키는 노출되지 않습니다.
+
+장표 형식과 `slide_plan.json` 구조는 [references/composition-format.md](references/composition-format.md)에 있습니다. 본문 슬라이드에는 그 페이지 전체를 설명하는 **리드 문단(50~100자)** 이 반드시 들어갑니다.
+
 ## 설치
 
-이 저장소를 Codex skill 디렉터리에 설치합니다.
+### Claude
+
+```bash
+mkdir -p ~/.claude/skills
+git clone https://github.com/merryAI-dev/MerryPPTmaker.git ~/.claude/skills/merry-slide
+```
+
+### Codex
 
 ```bash
 mkdir -p ~/.codex/skills
 git clone https://github.com/merryAI-dev/MerryPPTmaker.git ~/.codex/skills/merry-slide
 ```
 
-이미 설치되어 있다면 업데이트합니다.
+이미 설치되어 있다면 해당 디렉터리에서 업데이트합니다.
 
 ```bash
-cd ~/.codex/skills/merry-slide
 git pull
 ```
 
-Codex가 새 스킬을 다시 발견하도록 Codex 세션을 재시작합니다.
+새 스킬을 다시 발견하도록 세션을 재시작합니다. `agents/openai.yaml`은 Codex 전용 메타데이터이며 Claude에서는 `SKILL.md`의 frontmatter가 그 역할을 합니다.
 
 ## 의존성 설치
 
