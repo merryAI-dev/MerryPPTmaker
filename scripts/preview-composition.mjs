@@ -558,10 +558,6 @@ function adaptContent(c, target) {
 const pillDiv = (text, style) => String(text ?? '').trim()
   ? '<div class="pill" style="' + style + '">' + esc(text) + '</div>' : '';
 
-/* pill 텍스트가 없으면 그리지 않는다. 빌더의 pill() 가드와 동일한 규칙. */
-const pillDiv = (text, style) => String(text ?? '').trim()
-  ? '<div class="pill" style="' + style + '">' + esc(text) + '</div>' : '';
-
 const bullets = arr => '<ul>' + (arr || []).map(t => '<li>' + lines(t) + '</li>').join('') + '</ul>';
 
 /**
