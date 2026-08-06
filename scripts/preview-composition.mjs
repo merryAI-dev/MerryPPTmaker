@@ -17,9 +17,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { T } from '../components/mysc-proposal.mjs';
 
 const DEFAULT_OUT = 'slide-composition-preview.html';
+const SELF_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 /** 장표 형식. MYSC 레퍼런스 덱 32장을 분류해서 나온 유형이다. */
 const FORMATS = [
@@ -46,13 +50,19 @@ function usage() {
   --lead-max  리드 문단 최대 글자수. 기본값 200.
   --images    이미지 폴더. 폴더 안 사진을 갤러리로 실어 슬라이드의 이미지 자리에
               골라 넣을 수 있게 합니다.
+  --serve     검토 화면을 로컬 서버로 띄웁니다. 이때 'PPTX 생성'을 누르면 JSON을
+              내려받는 대신 서버가 바로 PPTX까지 만들어 줍니다. 사람이 JSON을
+              다시 옮길 필요가 없습니다.
+  --port      --serve 포트. 기본값 8760.
+  --pptx      --serve에서 만들 PPTX 경로. 기본값은 HTML 옆의 deck.pptx입니다.
 
 장표 형식: ${FORMATS.map((f) => f.name).join(', ')}
 `);
 }
 
 function parseArgs(argv) {
-  const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200, images: '' };
+  const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200,
+                 images: '', serve: false, port: 8760, pptx: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -70,6 +80,12 @@ function parseArgs(argv) {
       args.leadMax = Number.parseInt(value, 10); i += 1;
     } else if (key === '--images') {
       args.images = value || ''; i += 1;
+    } else if (key === '--serve') {
+      args.serve = true;
+    } else if (key === '--port') {
+      args.port = Number.parseInt(value, 10); i += 1;
+    } else if (key === '--pptx') {
+      args.pptx = value || ''; i += 1;
     } else {
       throw new Error(`알 수 없는 인자입니다: ${key}`);
     }
@@ -121,9 +137,18 @@ function buildHtml(plan, args, gallery) {
 
   .main { display:grid; grid-template-columns:1fr 268px; gap:16px; align-items:start; }
   .panel { background:#fff; border:1px solid var(--line); border-radius:11px; padding:14px; }
-  .stage { background:#fff; border:1px solid var(--line); border-radius:11px; padding:12px;
-           overflow:hidden; }
+  .stage { position:relative; background:#fff; border:1px solid var(--line); border-radius:11px;
+           padding:12px; overflow:hidden; }
   .holder { position:relative; width:100%; overflow:hidden; }
+  .stagenav { position:absolute; top:50%; transform:translateY(-50%); z-index:5;
+              width:46px; height:46px; border-radius:99px; border:1px solid var(--line);
+              background:#ffffffea; backdrop-filter:blur(2px); font-size:24px; line-height:1;
+              color:var(--navy); cursor:pointer; box-shadow:0 2px 10px #0002; padding:0;
+              display:flex; align-items:center; justify-content:center; }
+  .stagenav:hover:not(:disabled) { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .stagenav:disabled { opacity:.25; cursor:default; }
+  .stagenav.left { left:20px; }
+  .stagenav.right { right:20px; }
 
   /* ── 실제 슬라이드: A4 가로 11.693 x 8.267in, 96dpi 기준. pt/in 단위 그대로 사용 ── */
   .slide { position:absolute; top:0; left:0; width:11.693in; height:8.267in; background:#fff;
@@ -300,11 +325,15 @@ function buildHtml(plan, args, gallery) {
   .nav { display:flex; gap:7px; align-items:center; margin-top:12px; flex-wrap:wrap; }
   .nav .spacer { flex:1; }
 
-  .strip { display:flex; gap:5px; flex-wrap:wrap; margin-top:14px; padding-top:12px;
+  .striphead { font-size:12px; font-weight:700; color:var(--ink); margin:16px 0 8px; }
+  .strip { display:flex; gap:5px; flex-wrap:wrap; padding-top:10px;
            border-top:1px solid var(--line); }
   .chip { font-size:11px; padding:4px 9px; border-radius:99px; border:1px solid var(--line);
           background:#fff; cursor:pointer; color:var(--mute); }
   .chip.on { background:var(--navy); border-color:var(--navy); color:#fff; font-weight:700; }
+  .chip.done { border-color:var(--cyan); background:#f2fbff; color:#1c5a75; }
+  .chip.done.on { background:var(--navy); border-color:var(--navy); color:#fff; }
+  .strip .empty { font-size:11.5px; color:var(--mute); }
 
   dialog { border:1px solid var(--line); border-radius:12px; padding:18px; max-width:min(720px,92vw); }
   dialog textarea { width:100%; height:42vh; font-family:ui-monospace,monospace; font-size:11.5px;
@@ -313,7 +342,7 @@ function buildHtml(plan, args, gallery) {
 </style>
 
 <h1>${String(deckTitle).replace(/[<&]/g, '')}</h1>
-<p class="sub">실제 문구를 넣은 미리보기입니다. 한 장씩 형식과 제목을 확정한 뒤 <b>확정 저장</b>을 누르세요. ← → 키로 이동합니다.</p>
+<p class="sub">실제 문구를 넣은 미리보기입니다. 장을 넘기며 <b>이 장 확정</b>을 누르면 누른 순서대로 쌓이고, 다 고른 뒤 <b>PPTX 생성</b>을 누르면 그 순서로 만들어집니다. ← → 키로 이동합니다.</p>
 
 <div class="prog">
   <span class="pos" id="pos"></span>
@@ -322,7 +351,9 @@ function buildHtml(plan, args, gallery) {
 
 <div class="main">
   <div class="stage">
+    <button class="stagenav left" id="stagePrev" title="이전 (←)" aria-label="이전 슬라이드">‹</button>
     <div class="holder" id="holder"><div class="slide" id="slide"></div></div>
+    <button class="stagenav right" id="stageNext" title="다음 (→)" aria-label="다음 슬라이드">›</button>
   </div>
 
   <div class="panel">
@@ -336,10 +367,8 @@ function buildHtml(plan, args, gallery) {
       <textarea class="title-in lead-in" id="intro"></textarea>
     </div>
     <div class="nav">
-      <button id="prev">←</button>
-      <button id="next">→</button>
-      <button id="undo" title="되돌리기 (Ctrl+Z)">↶</button>
-      <button id="redo" title="다시 실행 (Ctrl+Shift+Z)">↷</button>
+      <button id="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
+      <button id="redo" title="다시 실행 (Ctrl+Shift+Z)">↷ 다시실행</button>
       <select id="move"></select>
     </div>
     <div id="figwrap" style="display:none">
@@ -353,12 +382,19 @@ function buildHtml(plan, args, gallery) {
       <button class="danger" id="del">삭제</button>
     </div>
     <div class="nav">
-      <button class="primary" id="confirm" style="width:100%">확정 저장</button>
+      <button class="primary" id="confirm" style="width:100%">이 장 확정</button>
+    </div>
+    <div class="nav">
+      <button id="build" style="width:100%">PPTX 생성 <span id="bcnt"></span></button>
     </div>
   </div>
 </div>
 
+<div class="striphead">확정한 슬라이드 <span id="stripCount"></span></div>
 <div class="strip" id="strip"></div>
+
+<div class="striphead">전체 슬라이드 <span id="allCount"></span></div>
+<div class="strip" id="allstrip"></div>
 
 <dialog id="gal">
   <p class="hint" id="galhint"></p>
@@ -370,7 +406,7 @@ function buildHtml(plan, args, gallery) {
 </dialog>
 
 <dialog id="out">
-  <p class="hint">확정된 구성을 <code>slide_plan.confirmed.json</code>으로 저장했습니다. 저장이 안 되면 복사해서 전달하세요.</p>
+  <p class="hint" id="outhint">확정된 구성을 <code>slide_plan.confirmed.json</code>으로 저장했습니다. 저장이 안 되면 복사해서 전달하세요.</p>
   <textarea id="json" readonly></textarea>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
     <button id="copy">복사</button>
@@ -387,6 +423,11 @@ const miniCache = { sig: null, html: '' };
 const G = ${JSON.stringify(T.grid)};
 let slides = ${JSON.stringify(slides)};
 let cur = 0;
+/* 장마다 고정 번호를 붙인다. 순서를 바꾸거나 지워도 확정 목록이 따라간다. */
+let nextId = 1;
+slides.forEach(s => { s._id = nextId; nextId += 1; });
+/* 확정한 장을 누른 순서대로 쌓는다. PPTX는 이 순서 그대로 만든다. */
+let confirmed = [];
 
 /* ── 되돌리기 ──────────────────────────────────────────────
    실수로 지우거나 형식을 잘못 고른 걸 복구할 수 있어야 한다.
@@ -396,7 +437,7 @@ const redoStack = [];
 const MAX_UNDO = 50;
 
 function snapshot(label) {
-  undoStack.push({ slides: JSON.stringify(slides), cur, label });
+  undoStack.push({ slides: JSON.stringify(slides), cur, confirmed: [...confirmed], label });
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   redoStack.length = 0;
   updateUndoUI();
@@ -404,19 +445,20 @@ function snapshot(label) {
 
 function applySnap(snap) {
   slides = JSON.parse(snap.slides);
+  confirmed = [...snap.confirmed];
   cur = Math.min(snap.cur, slides.length - 1);
   render();
 }
 
 function undo() {
   if (!undoStack.length) return;
-  redoStack.push({ slides: JSON.stringify(slides), cur, label: '되돌리기 취소' });
+  redoStack.push({ slides: JSON.stringify(slides), cur, confirmed: [...confirmed], label: '되돌리기 취소' });
   applySnap(undoStack.pop());
 }
 
 function redo() {
   if (!redoStack.length) return;
-  undoStack.push({ slides: JSON.stringify(slides), cur, label: '다시 실행' });
+  undoStack.push({ slides: JSON.stringify(slides), cur, confirmed: [...confirmed], label: '다시 실행' });
   applySnap(redoStack.pop());
 }
 
@@ -801,9 +843,28 @@ function render() {
   fitMinis();
   $('move').innerHTML = slides.map((_, i) =>
     '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + (i + 1) + '번째로</option>').join('');
-  $('strip').innerHTML = slides.map((sl, i) =>
-    '<button class="chip' + (i === cur ? ' on' : '') + '" data-i="' + i + '">' +
+  $('allstrip').innerHTML = slides.map((sl, i) =>
+    '<button class="chip' + (i === cur ? ' on' : '') +
+      (confirmed.includes(sl._id) ? ' done' : '') + '" data-i="' + i + '">' +
       (i + 1) + '. ' + esc((sl.title || '제목 없음').slice(0, 12)) + '</button>').join('');
+  $('allCount').textContent = '(' + slides.length + '장, 클릭하면 이동)';
+
+  // 확정 목록은 누른 순서 그대로다. PPTX도 이 순서로 만든다.
+  $('strip').innerHTML = confirmed.length
+    ? confirmed.map((id, n) => {
+        const i = slides.findIndex(s => s._id === id);
+        if (i < 0) return '';
+        return '<button class="chip done' + (i === cur ? ' on' : '') + '" data-i="' + i + '">' +
+          (n + 1) + '. ' + esc((slides[i].title || '제목 없음').slice(0, 12)) + '</button>';
+      }).join('')
+    : '<span class="empty">아직 확정한 장이 없습니다. 장을 넘기며 <b>이 장 확정</b>을 누르면 누른 순서대로 쌓입니다.</span>';
+  $('stripCount').textContent = confirmed.length ? '(' + confirmed.length + '장, 이 순서로 만듭니다)' : '';
+
+  const isDone = confirmed.includes(s._id);
+  $('confirm').textContent = isDone ? '✓ 확정됨 (누르면 해제)' : '이 장 확정';
+  $('confirm').classList.toggle('primary', !isDone);
+  $('build').disabled = !confirmed.length;
+  $('bcnt').textContent = confirmed.length ? '(' + confirmed.length + '장)' : '';
 
   const cc = s.content || {};
   const figs = [...(cc.figures || []), cc.figure,
@@ -821,13 +882,15 @@ function render() {
   }
 
   updateUndoUI();
-  $('prev').disabled = cur === 0;
-  $('next').disabled = cur === slides.length - 1;
+  $('stagePrev').disabled = cur === 0;
+  $('stageNext').disabled = cur === slides.length - 1;
   $('del').disabled = slides.length <= 1;
 }
 
 /* 글자수 배지. 리드 문단 길이 기준은 CLI 인자로 조정한다. */
 const LEAD_MIN = ${args.leadMin}, LEAD_MAX = ${args.leadMax};
+/* 서버로 띄웠으면 확정 저장이 곧바로 PPTX까지 간다. 정적 HTML이면 JSON을 내려받는다. */
+const SERVE = ${args.serve ? 'true' : 'false'};
 function counts() {
   const s = slides[cur], c = s.content || {};
   const t = (s.title || '').length;
@@ -999,15 +1062,15 @@ $('picker').addEventListener('click', e => {
   s.content = adaptContent(s.content || {}, s.layout);
   render();
 });
-$('strip').addEventListener('click', e => {
+['strip', 'allstrip'].forEach(id => $(id).addEventListener('click', e => {
   const b = e.target.closest('[data-i]'); if (!b) return;
   cur = +b.dataset.i; render();
-});
+}));
 $('title').addEventListener('input', e => {
   slides[cur].title = e.target.value; counts(); redrawSlide();
 });
-$('prev').onclick = () => { cur -= 1; render(); };
-$('next').onclick = () => { cur += 1; render(); };
+$('stagePrev').onclick = () => { cur -= 1; render(); };
+$('stageNext').onclick = () => { cur += 1; render(); };
 $('move').onchange = e => {
   snapshot('순서 이동');
   const to = +e.target.value;
@@ -1015,20 +1078,40 @@ $('move').onchange = e => {
 };
 $('dup').onclick = () => {
   snapshot('복제');
-  slides.splice(cur + 1, 0, JSON.parse(JSON.stringify(slides[cur]))); cur += 1; render();
+  const copy = JSON.parse(JSON.stringify(slides[cur]));
+  copy._id = nextId; nextId += 1;   // 복제본은 따로 확정해야 한다
+  slides.splice(cur + 1, 0, copy); cur += 1; render();
 };
-$('del').onclick = () => { snapshot('삭제'); slides.splice(cur, 1); render(); };
+$('del').onclick = () => {
+  snapshot('삭제');
+  const [gone] = slides.splice(cur, 1);
+  confirmed = confirmed.filter(id => id !== gone._id);
+  render();
+};
 $('add').onclick = () => {
   snapshot('장 추가');
-  slides.splice(cur + 1, 0, { layout: '좌우 2단', title: '', content: {} }); cur += 1; render();
+  slides.splice(cur + 1, 0, { _id: nextId, layout: '좌우 2단', title: '', content: {} });
+  nextId += 1; cur += 1; render();
 };
+/* 확정은 이 장 하나만 목록에 넣고 뺀다. 누른 순서가 곧 만들 순서다. */
 $('confirm').onclick = () => {
-  // 같은 사진이 여러 자리에 쓰이면 한 번만 저장하고 나머지는 가리킨다.
-  // 20장 넘는 덱에서 JSON이 배로 불어나는 걸 막는다.
+  snapshot('확정');
+  const id = slides[cur]._id;
+  if (confirmed.includes(id)) confirmed = confirmed.filter(x => x !== id);
+  else confirmed.push(id);
+  render();
+};
+
+/* 확정한 순서 그대로 묶는다. 같은 사진이 여러 자리에 쓰이면 한 번만 싣는다. */
+function packConfirmed() {
   const pool = {};
   const seen = new Map();
-  const packed = JSON.parse(JSON.stringify(slides.map((s, i) => ({ ...s, number: i + 1 }))));
+  const picked = confirmed
+    .map(id => slides.find(s => s._id === id))
+    .filter(Boolean);
+  const packed = JSON.parse(JSON.stringify(picked.map((s, i) => ({ ...s, number: i + 1 }))));
   packed.forEach(s => {
+    delete s._id;
     const c = s.content || {};
     [...(c.figures || []), c.figure, (c.left || {}).figure, (c.right || {}).figure]
       .filter(f => f && f.data)
@@ -1043,10 +1126,41 @@ $('confirm').onclick = () => {
         delete f.data;
       });
   });
+  return { title: ${JSON.stringify(deckTitle)}, assets: pool, slides: packed };
+}
 
-  const out = { title: ${JSON.stringify(deckTitle)}, assets: pool, slides: packed };
-  const text = JSON.stringify(out, null, 2);
+/* 생성은 따로다. 확정 목록이 곧 덱이 된다. */
+$('build').onclick = () => {
+  if (!confirmed.length) return;
+  const text = JSON.stringify(packConfirmed(), null, 2);
   $('json').value = text;
+
+  // 서버로 띄운 경우엔 JSON을 내려받게 하지 않는다. 그대로 넘겨서 PPTX까지 만든다.
+  if (SERVE) {
+    const btn = $('build');
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'PPTX 만드는 중…';
+    fetch('/build', { method: 'POST', headers: { 'content-type': 'application/json' }, body: text })
+      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(r.error || '빌드에 실패했습니다.');
+        $('outhint').innerHTML = '확정한 ' + confirmed.length + '장으로 PPTX를 만들었습니다.<br><b>' +
+          esc(r.pptx) + '</b>' +
+          (r.overflows && r.overflows.length
+            ? '<br><span style="color:#a33">글자가 넘치는 곳 ' + r.overflows.length + '군데를 확인하세요.</span>'
+            : '');
+        $('out').showModal();
+      })
+      .catch(e => {
+        $('outhint').innerHTML = '<span style="color:#a33">' + esc(e.message) + '</span><br>' +
+          '아래 JSON을 복사해서 전달하면 수동으로 만들 수 있습니다.';
+        $('out').showModal();
+      })
+      .finally(() => { btn.disabled = false; btn.innerHTML = label; render(); });
+    return;
+  }
+
   const blob = new Blob([text], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'slide_plan.confirmed.json'; a.click();
@@ -1100,7 +1214,8 @@ function main() {
 
   const outPath = path.resolve(args.out);
   const gallery = loadGallery(args.images);
-  fs.writeFileSync(outPath, buildHtml(plan, args, gallery), 'utf8');
+  const html = buildHtml(plan, args, gallery);
+  fs.writeFileSync(outPath, html, 'utf8');
 
   console.log(JSON.stringify({
     output: outPath,
@@ -1108,6 +1223,58 @@ function main() {
     gallery: gallery.length,
     unknown_formats: unknown,
   }, null, 2));
+
+  if (args.serve) serve(html, args, outPath);
+}
+
+/**
+ * 검토 화면을 로컬 서버로 띄운다.
+ * '확정 저장'이 /build로 들어오면 확정 JSON을 남기고 곧바로 PPTX까지 만든다.
+ * 사람이 JSON을 내려받아 다시 넘길 일이 없다.
+ */
+function serve(html, args, outPath) {
+  const dir = path.dirname(outPath);
+  const jsonPath = path.join(dir, 'slide_plan.confirmed.json');
+  const pptxPath = path.resolve(args.pptx || path.join(dir, 'deck.pptx'));
+  const builder = path.resolve(SELF_DIR, '../components/build-from-plan.mjs');
+
+  http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === '/build') {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        const reply = (code, body) => {
+          res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(body));
+        };
+        try {
+          const text = Buffer.concat(chunks).toString('utf8');
+          JSON.parse(text);
+          fs.writeFileSync(jsonPath, text, 'utf8');
+          const r = spawnSync(process.execPath,
+            [builder, '--plan', jsonPath, '--out', pptxPath, '--title', args.title || ''],
+            { encoding: 'utf8', maxBuffer: 1 << 28 });
+          if (r.status !== 0) {
+            reply(500, { ok: false, error: (r.stderr || r.stdout || '빌드 실패').trim().slice(0, 500) });
+            console.error(`빌드 실패:\n${r.stderr || r.stdout}`);
+            return;
+          }
+          let overflows = [];
+          try { overflows = (JSON.parse(r.stdout).overflows) || []; } catch { /* 요약 없으면 넘어간다 */ }
+          console.log(`PPTX 완성: ${pptxPath}` +
+                      (overflows.length ? ` (글자 넘침 ${overflows.length}군데)` : ''));
+          reply(200, { ok: true, pptx: pptxPath, json: jsonPath, overflows });
+        } catch (error) {
+          reply(500, { ok: false, error: error.message });
+        }
+      });
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(html);
+  }).listen(args.port, () => {
+    console.log(`검토 화면: http://localhost:${args.port}  (PPTX 생성을 누르면 ${pptxPath} 로 바로 만들어집니다)`);
+  });
 }
 
 try {

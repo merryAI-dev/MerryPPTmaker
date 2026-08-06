@@ -336,10 +336,17 @@ Stage 0에서 폰트, 본문 크기, 렌더 모델, 산출물 편집성이 비�
 `slide_plan.json`을 만들었으면 채팅으로 목록을 나열하지 말고 프리뷰를 띄운다.
 
 ```bash
-node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
+node scripts/preview-composition.mjs --plan slide_plan.json --serve --images ~/사진폴더 --pptx deck.pptx
 ```
 
-프리뷰는 와이어프레임이 아니라 **실제 문구가 들어간 슬라이드**를 렌더한다. 사용자는 한 장씩 넘기며 형식을 고르고, 제목을 고치고, 순서를 바꾸고, 장을 지우거나 추가한 뒤 `확정 저장`으로 `slide_plan.confirmed.json`을 내려받는다.
+프리뷰는 와이어프레임이 아니라 **실제 문구가 들어간 슬라이드**를 렌더한다. 슬라이드 좌우의 큰 화살표로 넘기고, 형식을 고르고, 제목과 리드 문단을 고치고, 순서를 바꾸거나 장을 지우고 추가한다.
+
+확정과 생성은 **따로**다.
+
+- `이 장 확정` — 지금 보고 있는 장을 확정 목록에 넣는다. **누른 순서가 그대로 덱의 순서**가 된다. 다시 누르면 해제된다.
+- `PPTX 생성` — 확정한 장만, 확정한 순서대로 만든다.
+
+`--serve`로 띄우면 `PPTX 생성`을 누르는 즉시 서버가 PPTX까지 만든다. 사용자가 JSON을 내려받아 다시 건네줄 일이 없다. **CP3에서는 이 방식을 기본으로 쓴다.** `--serve` 없이 정적 HTML로 만들면 `PPTX 생성`이 `slide_plan.confirmed.json`을 내려받는 예전 방식으로 동작한다.
 
 ### 이미지 폴더는 프리뷰를 띄우기 전에 받는다
 
@@ -387,13 +394,15 @@ node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴
 
 ## Stage 4A: Build (Native 트랙)
 
-CP3에서 확정한 구성이 있으면 스크립트를 새로 짜지 말고 빌더를 그대로 돌린다.
+CP3을 `--serve`로 띄웠다면 사용자가 `PPTX 생성`을 누른 시점에 **이미 만들어져 있다.** 이 단계를 다시 돌리지 않는다. 서버 로그의 `PPTX 완성: <경로>`가 결과물이다.
+
+`--serve` 없이 진행해서 확정 JSON만 있는 경우에만 빌더를 직접 돌린다.
 
 ```bash
 node components/build-from-plan.mjs --out deck.pptx
 ```
 
-`--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾는다. 사용자에게 파일 경로를 묻거나 내용을 붙여달라고 하지 않는다. 프리뷰에서 `확정 저장`을 누른 뒤 바로 이 명령을 실행하면 된다.
+`--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾는다. 사용자에게 파일 경로를 묻거나 내용을 붙여달라고 하지 않는다.
 
 이미지가 폴더에 준비되어 있으면 함께 넘긴다. 파일명은 `page_<슬라이드번호>.png|jpg`다.
 

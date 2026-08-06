@@ -124,10 +124,17 @@ Claude Code에는 이미지 생성 도구가 없으므로 Native 트랙만 사�
 Stage 2가 끝나면 채팅으로 목록을 나열하는 대신 구성 프리뷰를 띄웁니다.
 
 ```bash
-node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
+node scripts/preview-composition.mjs --plan slide_plan.json --serve --images ~/사진폴더 --pptx deck.pptx
 ```
 
-와이어프레임이 아니라 **실제 문구가 들어간 슬라이드**가 렌더됩니다. 한 장씩 넘기며 형식을 고르고, 제목을 고치고, 순서를 바꾼 뒤 `확정 저장`을 누르면 `slide_plan.confirmed.json`이 저장되고, 그 파일이 그대로 PPT 생성 입력이 됩니다.
+와이어프레임이 아니라 **실제 문구가 들어간 슬라이드**가 렌더됩니다. 슬라이드 좌우의 큰 화살표로 넘기며 형식을 고르고, 제목과 리드 문단을 고치고, 순서를 바꿉니다.
+
+확정과 생성은 따로입니다.
+
+- `이 장 확정` — 지금 장을 확정 목록에 넣습니다. **누른 순서가 곧 덱의 순서**입니다. 다시 누르면 해제됩니다.
+- `PPTX 생성` — 확정한 장만, 확정한 순서대로 만듭니다.
+
+`--serve`로 띄우면 `PPTX 생성`을 누르는 순간 서버가 PPTX까지 만들어 냅니다. JSON을 내려받아 다시 넘길 필요가 없습니다.
 
 "3번은 2단으로, 7번은 표로" 같은 왕복이 없어져 토큰이 줄고 해석 차이도 생기지 않습니다. 형식은 그림과 한글 이름으로만 고르며 내부 키는 노출되지 않습니다.
 
@@ -135,11 +142,13 @@ node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
 
 ### 확정한 구성이 그대로 PPT가 됩니다
 
+`--serve`로 띄웠다면 `PPTX 생성`을 누른 시점에 이미 만들어져 있습니다. 확정 JSON만 따로 있는 경우에는 빌더를 직접 돌립니다.
+
 ```bash
 node components/build-from-plan.mjs --out deck.pptx
 ```
 
-`--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾습니다. 프리뷰에서 `확정 저장`을 누른 뒤 이 명령만 실행하면 되고, 파일을 옮기거나 경로를 알려줄 필요가 없습니다.
+`--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾습니다. 파일을 옮기거나 경로를 알려줄 필요가 없습니다.
 
 프리뷰와 같은 좌표를 쓰므로 확정한 모습이 그대로 덱이 됩니다. 표·텍스트·도형은 PowerPoint 네이티브 객체로 남아 직접 수정할 수 있습니다.
 
