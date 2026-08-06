@@ -31,6 +31,7 @@ const FORMATS = [
   { name: '전폭 도식', desc: '구조나 흐름을 한 폭으로 크게' },
   { name: '숫자 강조', desc: '핵심 수치 여러 개를 나열' },
   { name: '단계 흐름', desc: '순서나 과정을 단계로 표현' },
+  { name: '차트', desc: '수치 추이나 비중을 그래프로' },
 ];
 
 function usage() {
@@ -194,6 +195,14 @@ function buildHtml(plan, args, gallery) {
                  font-weight:700; line-height:1.4; white-space:pre-line; padding:.13in .1in;
                  display:flex; align-items:center; justify-content:center; text-align:center;
                  clip-path:polygon(0 0, calc(100% - .13in) 0, 100% 50%, calc(100% - .13in) 100%, 0 100%); }
+  .slide .chart { position:absolute; display:flex; align-items:flex-end; gap:.18in;
+                  border-bottom:.5pt solid #c3ccd9; padding:0 .1in .02in; }
+  .slide .chart .bar { flex:1; height:100%; display:flex; flex-direction:column;
+                       align-items:center; justify-content:flex-end; }
+  .slide .chart .bar i { display:block; width:70%; background:var(--navy); border-radius:2px 2px 0 0; }
+  .slide .chart .bar b { font-size:9.5pt; color:var(--navy); margin-top:.03in; }
+  .slide .chart .bar span { font-size:9.5pt; color:#5b6678; }
+  .slide .chart em { font-style:normal; font-size:11pt; color:#a33; margin:auto; }
   .slide .stat { position:absolute; }
   .slide .stat .sl { font-size:10.8pt; color:#000; margin-bottom:.05in; }
   .slide .sv { font-size:30.2pt; font-weight:700; color:#000; line-height:1; }
@@ -321,6 +330,8 @@ function buildHtml(plan, args, gallery) {
     <div class="nav">
       <button id="prev">←</button>
       <button id="next">→</button>
+      <button id="undo" title="되돌리기 (Ctrl+Z)">↶</button>
+      <button id="redo" title="다시 실행 (Ctrl+Shift+Z)">↷</button>
       <select id="move"></select>
     </div>
     <div id="figwrap" style="display:none">
@@ -362,10 +373,51 @@ function buildHtml(plan, args, gallery) {
 <script>
 const FORMATS = ${JSON.stringify(FORMATS)};
 const GALLERY = ${JSON.stringify(gallery)};
+/* 형식 미리보기 캐시. 내용이 그대로면 8종을 다시 그리지 않는다. */
+const miniCache = { sig: null, html: '' };
 /* 배치 격자는 components/mysc-proposal.mjs의 토큰에서 온다. 빌더와 같은 값이다. */
 const G = ${JSON.stringify(T.grid)};
 let slides = ${JSON.stringify(slides)};
 let cur = 0;
+
+/* ── 되돌리기 ──────────────────────────────────────────────
+   실수로 지우거나 형식을 잘못 고른 걸 복구할 수 있어야 한다.
+   상태를 바꾸기 직전에 스냅샷을 쌓고 Ctrl+Z로 되돌린다. */
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 50;
+
+function snapshot(label) {
+  undoStack.push({ slides: JSON.stringify(slides), cur, label });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+  updateUndoUI();
+}
+
+function applySnap(snap) {
+  slides = JSON.parse(snap.slides);
+  cur = Math.min(snap.cur, slides.length - 1);
+  render();
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push({ slides: JSON.stringify(slides), cur, label: '되돌리기 취소' });
+  applySnap(undoStack.pop());
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push({ slides: JSON.stringify(slides), cur, label: '다시 실행' });
+  applySnap(redoStack.pop());
+}
+
+function updateUndoUI() {
+  const u = document.getElementById('undo');
+  const r = document.getElementById('redo');
+  if (u) u.disabled = !undoStack.length;
+  if (r) r.disabled = !redoStack.length;
+}
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
@@ -465,6 +517,22 @@ function adaptContent(c, target) {
                         : (splitValue(i.detail || i.label) || { value: '—', unit: '' });
       return { label: i.label, value: v.value, unit: v.unit, note: i.note || '' };
     });
+    if (!c.pill) c.pill = heading;
+  }
+
+  if (target === '차트' && !(c.chart && (c.chart.series || []).length)) {
+    const src = items.length ? items.slice(0, 6) : [{ label: '항목' }];
+    c.chart = {
+      type: 'bar',
+      categories: src.map(i => i.label),
+      series: [{
+        name: c.pill || '값',
+        values: src.map(i => {
+          const v = i.value || (splitValue(i.detail || i.label) || {}).value || '0';
+          return Number(String(v).replace(/,/g, '')) || 0;
+        }),
+      }],
+    };
     if (!c.pill) c.pill = heading;
   }
 
@@ -610,6 +678,23 @@ function renderSlide(s, i) {
       sts +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(arr.length, 1), G.rowGap.stats), spN.figY, spN.figH) +
       (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
+  } else if (f === '차트') {
+    const ch = c.chart || {};
+    const spC = splitBody(CT, G.natural.chart, !!c.note);
+    const cats = ch.categories || [];
+    const ser = (ch.series || [])[0] || { values: [] };
+    const vals = (ser.values || []).map(Number);
+    const max = Math.max(1, ...vals);
+    const bars = cats.map((cat, k) => {
+      const pct = Math.round(((vals[k] || 0) / max) * 100);
+      return '<div class="bar"><i style="height:' + pct + '%"></i>' +
+        '<b>' + esc(vals[k] ?? '') + '</b><span>' + esc(cat) + '</span></div>';
+    }).join('');
+    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+      '<div class="chart" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + spC.h + 'in">' +
+        (bars || '<em>차트 데이터가 없습니다</em>') + '</div>' +
+      figureRow(c, evenCols(G.full.x, G.full.w, Math.max(cats.length, 1), G.rowGap.stats), spC.figY, spC.figH) +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else {
     inner += '<div class="note" style="top:2.2in">이 형식의 미리보기는 아직 없습니다.</div>';
   }
@@ -665,7 +750,11 @@ function render() {
   }
 
   // 8종 형식을 이름이 아니라 '이 슬라이드가 그 형식이면 어떻게 보이는지'로 보여준다.
-  $('picker').innerHTML = FORMATS.map(f => {
+  // 내용이 그대로면 다시 그리지 않는다. 슬라이드를 넘길 때마다 8번 렌더하면 느려진다.
+  const sig = JSON.stringify(s);
+  if (miniCache.sig !== sig) {
+    miniCache.sig = sig;
+    miniCache.html = FORMATS.map(f => {
     const probe = JSON.parse(JSON.stringify(s));
     probe.layout = f.name;
     probe.content = adaptContent(probe.content || {}, f.name);
@@ -674,7 +763,12 @@ function render() {
     return '<button class="opt' + (f.name === s.layout ? ' on' : '') + '" data-name="' + esc(f.name) + '">' +
       '<span class="mini"><span class="slide' + cls + '">' + renderSlide(probe, cur) + '</span></span>' +
       '<b>' + esc(f.name) + '</b><span class="d">' + esc(f.desc) + '</span></button>';
-  }).join('');
+    }).join('');
+  }
+  $('picker').innerHTML = miniCache.html;
+  // 선택 표시는 캐시된 HTML에 매번 다시 입힌다.
+  [...$('picker').children].forEach(el =>
+    el.classList.toggle('on', el.dataset.name === s.layout));
   fitMinis();
   $('move').innerHTML = slides.map((_, i) =>
     '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + (i + 1) + '번째로</option>').join('');
@@ -697,6 +791,7 @@ function render() {
       : '이미지 폴더를 받지 못했습니다. 사진이 있는 폴더 경로를 알려주면 여기서 골라 넣을 수 있습니다.';
   }
 
+  updateUndoUI();
   $('prev').disabled = cur === 0;
   $('next').disabled = cur === slides.length - 1;
   $('del').disabled = slides.length <= 1;
@@ -721,6 +816,7 @@ function redrawSlide() {
 
 $('cands').addEventListener('click', e => {
   const b = e.target.closest('[data-k]'); if (!b) return;
+  snapshot('리드 문단 선택');
   const c = slides[cur].content;
   c.intro = (c.introOptions || [])[+b.dataset.k];
   $('intro').value = c.intro || '';
@@ -812,6 +908,7 @@ fileInput.onchange = async () => {
 };
 
 async function assign(key, item) {
+  snapshot('이미지 넣기');
   const fig = figOf(key);
   if (!fig) return;
   try {
@@ -850,6 +947,7 @@ $('gallist').addEventListener('click', async e => {
   await assign(pendingKey, GALLERY[+b.dataset.g]);
 });
 $('galclear').onclick = () => {
+  snapshot('이미지 비우기');
   const fig = figOf(pendingKey);
   if (fig) { delete fig.data; delete fig.w; delete fig.h; delete fig.name; }
   $('gal').close(); render();
@@ -866,6 +964,7 @@ $('figclear').onclick = () => {
 
 $('picker').addEventListener('click', e => {
   const b = e.target.closest('[data-name]'); if (!b) return;
+  snapshot('형식 변경');
   const s = slides[cur];
   s.layout = b.dataset.name;
   s.content = adaptContent(s.content || {}, s.layout);
@@ -881,18 +980,42 @@ $('title').addEventListener('input', e => {
 $('prev').onclick = () => { cur -= 1; render(); };
 $('next').onclick = () => { cur += 1; render(); };
 $('move').onchange = e => {
+  snapshot('순서 이동');
   const to = +e.target.value;
   const [s] = slides.splice(cur, 1); slides.splice(to, 0, s); cur = to; render();
 };
 $('dup').onclick = () => {
+  snapshot('복제');
   slides.splice(cur + 1, 0, JSON.parse(JSON.stringify(slides[cur]))); cur += 1; render();
 };
-$('del').onclick = () => { slides.splice(cur, 1); render(); };
+$('del').onclick = () => { snapshot('삭제'); slides.splice(cur, 1); render(); };
 $('add').onclick = () => {
+  snapshot('장 추가');
   slides.splice(cur + 1, 0, { layout: '좌우 2단', title: '', content: {} }); cur += 1; render();
 };
 $('confirm').onclick = () => {
-  const out = { title: ${JSON.stringify(deckTitle)}, slides: slides.map((s, i) => ({ ...s, number: i + 1 })) };
+  // 같은 사진이 여러 자리에 쓰이면 한 번만 저장하고 나머지는 가리킨다.
+  // 20장 넘는 덱에서 JSON이 배로 불어나는 걸 막는다.
+  const pool = {};
+  const seen = new Map();
+  const packed = JSON.parse(JSON.stringify(slides.map((s, i) => ({ ...s, number: i + 1 }))));
+  packed.forEach(s => {
+    const c = s.content || {};
+    [...(c.figures || []), c.figure, (c.left || {}).figure, (c.right || {}).figure]
+      .filter(f => f && f.data)
+      .forEach(f => {
+        let id = seen.get(f.data);
+        if (!id) {
+          id = 'img' + (Object.keys(pool).length + 1);
+          seen.set(f.data, id);
+          pool[id] = f.data;
+        }
+        f.assetId = id;
+        delete f.data;
+      });
+  });
+
+  const out = { title: ${JSON.stringify(deckTitle)}, assets: pool, slides: packed };
   const text = JSON.stringify(out, null, 2);
   $('json').value = text;
   const blob = new Blob([text], { type: 'application/json' });
@@ -904,7 +1027,15 @@ $('confirm').onclick = () => {
 $('copy').onclick = () => navigator.clipboard.writeText($('json').value);
 $('close').onclick = () => $('out').close();
 addEventListener('resize', () => { fit(); fitMinis(); });
+$('undo').onclick = undo;
+$('redo').onclick = redo;
+
 document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+    return;
+  }
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if (e.key === 'ArrowLeft' && cur > 0) { cur -= 1; render(); }
   if (e.key === 'ArrowRight' && cur < slides.length - 1) { cur += 1; render(); }

@@ -41,7 +41,7 @@ function usage() {
            사진이 없는 이미지 자리를 빗금 박스로 남기지 않고 지웁니다. 한 줄이
            통째로 비면 그 공간까지 콘텐츠가 차지합니다. 최종본을 낼 때 씁니다.
 
-지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름
+지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름, 차트
 `);
 }
 
@@ -154,7 +154,10 @@ function chrome(pptx, slide, s, index) {
     line: { color: T.color.rule, width: T.header.rule.pt },
   });
 
+  checkFit(index + 1, '제목줄', s.title, 10.45 - (c.label ? 2.2 : 0), 0.42, 14.5, 1.2);
+
   if (c.intro) {
+    checkFit(index + 1, '리드 문단', c.intro, L.intro.w, L.intro.h, 12, 1.35);
     slide.addText(c.intro, {
       x: L.intro.x, y: L.intro.y, w: L.intro.w, h: L.intro.h,
       fontFace: T.font.family, fontSize: 12, color: '1A2233',
@@ -177,9 +180,17 @@ function pill(pptx, slide, text, x, y, w) {
 }
 
 /** 삼각형 마커 불릿. 레퍼런스는 원형 불릿 대신 작은 삼각형을 쓴다. */
-function bullets(slide, items, x, y, w, h) {
+function bullets(slide, items, x, y, w, h, slideNo) {
   const list = (items || []).filter(Boolean);
   if (!list.length) return;
+  const totalLines = list.reduce((n, s) => n + lineCount(s, w - 0.19, 12), 0);
+  if (totalLines * (12 / 72) * 1.45 > h + 0.05) {
+    overflows.push({
+      slide: slideNo, element: '본문 목록',
+      needs_in: Math.round(totalLines * (12 / 72) * 1.45 * 100) / 100,
+      has_in: Math.round(h * 100) / 100, lines: totalLines, text: `${list.length}개 항목`,
+    });
+  }
   slide.addText(
     list.map((t, i) => ({
       text: t,
@@ -237,7 +248,8 @@ function figureRow(pptx, slide, c, cols, y, h) {
 const orSlot = (fig) => fig || { caption: '이미지 자리', hint: '사진을 넣어 주세요' };
 
 /** 실제 사진이 들어 있는 자리인지. */
-const hasImage = (fig) => Boolean(fig && (fig.data || (fig.file && fs.existsSync(fig.file))));
+const hasImage = (fig) => Boolean(fig
+  && (fig.data || (fig.assetId && ASSETS[fig.assetId]) || (fig.file && fs.existsSync(fig.file))));
 
 /**
  * 이 슬라이드의 이미지 자리 목록.
@@ -251,6 +263,7 @@ const figuresOf = (c) => c.figures || (c.figure ? [c.figure] : []);
  * 그 공간은 콘텐츠가 가져간다.
  */
 let DROP_EMPTY = false;
+let ASSETS = {};
 let droppedSlots = 0;
 const bandWanted = (figs) => !DROP_EMPTY || figs.some(hasImage);
 
@@ -265,8 +278,9 @@ const bandWanted = (figs) => !DROP_EMPTY || figs.some(hasImage);
 function figureBox(pptx, slide, fig, x, y, w, h) {
   if (!fig || h <= 0.2) return;
 
-  const src = fig.data
-    ? { data: fig.data }
+  const data = fig.data || (fig.assetId ? ASSETS[fig.assetId] : null);
+  const src = data
+    ? { data }
     : (fig.file && fs.existsSync(fig.file) ? { path: fig.file } : null);
 
   if (src) {
@@ -274,7 +288,7 @@ function figureBox(pptx, slide, fig, x, y, w, h) {
     // 원본 크기를 읽어 직접 letterbox 계산한다.
     const dim = fig.w && fig.h
       ? { w: fig.w, h: fig.h }
-      : imageSize(fig.data ? dataUrlToBuffer(fig.data) : fs.readFileSync(fig.file));
+      : imageSize(data ? dataUrlToBuffer(data) : fs.readFileSync(fig.file));
 
     let box = { x, y, w, h };
     if (dim) {
@@ -301,29 +315,75 @@ function figureBox(pptx, slide, fig, x, y, w, h) {
   });
 }
 
+/* ── 넘침 검사 ───────────────────────────────────────────────
+   렌더해서 눈으로 보기 전에 좌표로 잡을 수 있는 넘침은 미리 잡는다.
+   한글은 폭이 거의 일정해서 글자수로 줄 수를 꽤 정확히 추정할 수 있다. */
+
+const overflows = [];
+
+/** 12pt 한글 기준 1글자 폭 ≈ 0.167in. 영문·숫자는 절반으로 센다. */
+function visualLen(text) {
+  let n = 0;
+  for (const ch of String(text)) n += /[\uAC00-\uD7A3\u3131-\u318E]/.test(ch) ? 1 : 0.55;
+  return n;
+}
+
+/** 주어진 폭·글자크기에서 몇 줄이 되는지. */
+function lineCount(text, widthIn, pt) {
+  const perLine = widthIn / (pt / 72);
+  return String(text).split('\n')
+    .reduce((sum, line) => sum + Math.max(1, Math.ceil(visualLen(line) / perLine)), 0);
+}
+
+/** 텍스트가 상자를 넘치면 기록한다. 빌드는 계속하고 마지막에 함께 보고한다. */
+function checkFit(slideNo, what, text, widthIn, heightIn, pt, lineMul = 1.35) {
+  if (!text) return;
+  const lines = lineCount(text, widthIn, pt);
+  const needed = lines * (pt / 72) * lineMul;
+  if (needed > heightIn + 0.02) {
+    overflows.push({
+      slide: slideNo, element: what,
+      needs_in: Math.round(needed * 100) / 100,
+      has_in: Math.round(heightIn * 100) / 100,
+      lines,
+      text: String(text).slice(0, 40),
+    });
+  }
+}
+
 /* ── 형식별 조립 ─────────────────────────────────────────────── */
 
-function twoColumn(pptx, slide, c, PT, CT) {
+function twoColumn(pptx, slide, c, PT, CT, slideNo) {
   const rows = Math.max(((c.left || {}).body || []).length,
     ((c.right || {}).body || []).length, 1);
-  const sideFigs = [c.left, c.right].filter(Boolean).map((s) => s.figure);
+  // 좌우는 각자의 figure를 쓰되, 프리뷰가 figures 배열로 넘긴 경우도 받는다.
+  const arr = c.figures || [];
+  // 실제 사진이 있는 쪽이 이긴다. 빈 자리표시자가 사진을 가리지 않게.
+  const figFor = (side, i) => {
+    const own = side && side.figure;
+    if (hasImage(own)) return own;
+    if (hasImage(arr[i])) return arr[i];
+    return own || arr[i];
+  };
+  const sideFigs = [figFor(c.left, 0), figFor(c.right, 1)];
   const natural = bandWanted(sideFigs)
     ? rows * L.natural.bulletRow + L.natural.bulletPad
     : Number.POSITIVE_INFINITY;
   const sp = splitBody(CT, natural, false);
-  const side = (s, x) => {
+  const side = (s, x, i) => {
     if (!s) return;
     pill(pptx, slide, s.pill, x, PT, L.col.w);
-    bullets(slide, s.body, x, CT, L.col.w, sp.h);
+    bullets(slide, s.body, x, CT, L.col.w, sp.h, slideNo);
     if (!sp.figH) return;
-    if (DROP_EMPTY && !hasImage(s.figure)) { droppedSlots += 1; return; }
-    figureBox(pptx, slide, orSlot(s.figure), x, sp.figY, L.col.w, sp.figH);
+    const fig = figFor(s, i);
+    if (DROP_EMPTY && !hasImage(fig)) { droppedSlots += 1; return; }
+    figureBox(pptx, slide, orSlot(fig), x, sp.figY, L.col.w, sp.figH);
   };
-  side(c.left, L.col.left);
-  side(c.right, L.col.right);
+  side(c.left, L.col.left, 0);
+  side(c.right, L.col.right, 1);
 }
 
-function tableSlide(pptx, slide, c, PT, CT) {
+function tableSlide(pptx, slide, c, PT, CT, slideNo) {
   const t = c.table || { headers: [], rows: [] };
   const tw = L.full.w;
   const nrows = (t.rows || []).length || 1;
@@ -361,7 +421,7 @@ function tableSlide(pptx, slide, c, PT, CT) {
   note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
-function diagramSlide(pptx, slide, c, PT, CT) {
+function diagramSlide(pptx, slide, c, PT, CT, slideNo) {
   const flow = c.flow || [];
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
   const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.flow : Number.POSITIVE_INFINITY, Boolean(c.note));
@@ -402,7 +462,7 @@ function diagramSlide(pptx, slide, c, PT, CT) {
   note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
-function stepsSlide(pptx, slide, c, PT, CT) {
+function stepsSlide(pptx, slide, c, PT, CT, slideNo) {
   const steps = c.steps || [];
   const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.steps : Number.POSITIVE_INFINITY, Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
@@ -429,7 +489,7 @@ function stepsSlide(pptx, slide, c, PT, CT) {
   note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
-function statsSlide(pptx, slide, c, PT, CT) {
+function statsSlide(pptx, slide, c, PT, CT, slideNo) {
   const stats = c.stats || [];
   const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.stats : Number.POSITIVE_INFINITY, Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
@@ -454,6 +514,62 @@ function statsSlide(pptx, slide, c, PT, CT) {
 
   figureRow(pptx, slide, c,
     evenCols(L.full.x, L.full.w, Math.max(stats.length, 1), L.rowGap.stats), sp.figY, sp.figH);
+  note(slide, c.note, L.bottom - L.noteH + 0.14);
+}
+
+/**
+ * 차트. PowerPoint 네이티브 차트로 넣어 사용자가 데이터를 직접 고칠 수 있게 한다.
+ * 이미지로 굽지 않는다. 발표 직전 숫자가 바뀌는 일이 흔하다.
+ */
+function chartSlide(pptx, slide, c, PT, CT, slideNo) {
+  const ch = c.chart || {};
+  const kind = { bar: 'bar', column: 'bar', line: 'line', pie: 'pie', doughnut: 'doughnut' }[ch.type] || 'bar';
+  const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.chart : Number.POSITIVE_INFINITY,
+    Boolean(c.note));
+  pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
+
+  const series = (ch.series || []).map((s) => ({
+    name: s.name || '',
+    labels: ch.categories || [],
+    values: (s.values || []).map(Number),
+  }));
+
+  if (series.length) {
+    // 팔레트는 관찰된 브랜드 색에서 가져온다. 임의의 무지개색을 쓰지 않는다.
+    const colors = [T.color.navy, T.color.cyan, T.color.navyMid, T.color.cyanTintStrong];
+    slide.addChart(pptx.ChartType[kind], series, {
+      x: L.full.x, y: CT, w: L.full.w, h: sp.h,
+      chartColors: colors.slice(0, Math.max(series.length, kind === 'pie' || kind === 'doughnut'
+        ? (ch.categories || []).length : 1)),
+      showLegend: series.length > 1,
+      legendPos: 'b',
+      legendFontFace: T.font.family,
+      legendFontSize: 10,
+      showValue: kind !== 'line',
+      dataLabelPosition: kind === 'bar' ? 'outEnd' : 'ctr',
+      dataLabelFontFace: T.font.family,
+      dataLabelFontSize: 9,
+      catAxisLabelFontFace: T.font.family,
+      catAxisLabelFontSize: 10,
+      catAxisLabelColor: '5B6678',
+      valAxisLabelFontFace: T.font.family,
+      valAxisLabelFontSize: 10,
+      valAxisLabelColor: '5B6678',
+      valGridLine: { color: 'E4E9F1', size: 0.5 },
+      catGridLine: { style: 'none' },
+      border: { pt: 0, color: 'FFFFFF' },
+    });
+  } else {
+    slide.addText('차트 데이터가 없습니다.', {
+      x: L.full.x, y: CT, w: L.full.w, h: sp.h,
+      fontFace: T.font.family, fontSize: 12, color: 'A33333',
+      align: 'center', valign: 'middle', margin: 0,
+    });
+  }
+
+  figureRow(pptx, slide, c,
+    evenCols(L.full.x, L.full.w, Math.max((ch.categories || []).length || 1, 1), L.rowGap.stats),
+    sp.figY, sp.figH);
   note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
@@ -523,7 +639,7 @@ function countFigures(plan, pred) {
   let n = 0;
   plan.slides.forEach((s) => {
     const c = s.content || {};
-    [c.figure, c.left && c.left.figure, c.right && c.right.figure]
+    [...(c.figures || []), c.figure, c.left && c.left.figure, c.right && c.right.figure]
       .filter(Boolean).forEach((f) => { if (pred(f)) n += 1; });
   });
   return n;
@@ -552,11 +668,13 @@ function buildSlide(pptx, s, index) {
   const PT = c.intro ? L.pillTop : L.pillTopBare;
   const CT = PT + 0.44;
 
-  if (f === '좌우 2단') twoColumn(pptx, slide, c, PT, CT);
-  else if (f === '표 중심') tableSlide(pptx, slide, c, PT, CT);
-  else if (f === '전폭 도식') diagramSlide(pptx, slide, c, PT, CT);
-  else if (f === '단계 흐름') stepsSlide(pptx, slide, c, PT, CT);
-  else if (f === '숫자 강조') statsSlide(pptx, slide, c, PT, CT);
+  const no = index + 1;
+  if (f === '좌우 2단') twoColumn(pptx, slide, c, PT, CT, no);
+  else if (f === '표 중심') tableSlide(pptx, slide, c, PT, CT, no);
+  else if (f === '전폭 도식') diagramSlide(pptx, slide, c, PT, CT, no);
+  else if (f === '단계 흐름') stepsSlide(pptx, slide, c, PT, CT, no);
+  else if (f === '숫자 강조') statsSlide(pptx, slide, c, PT, CT, no);
+  else if (f === '차트') chartSlide(pptx, slide, c, PT, CT, no);
   else {
     slide.addText(`지원하지 않는 형식입니다: ${f}`, {
       x: L.full.x, y: CT, w: L.full.w, h: 0.5,
@@ -619,6 +737,7 @@ async function main() {
   }
 
   DROP_EMPTY = args.dropEmpty;
+  ASSETS = plan.assets || {};
 
   const PptxGenJS = loadPptxGenJS();
   const pptx = new PptxGenJS();
@@ -631,7 +750,7 @@ async function main() {
   const unsupported = [];
   plan.slides.forEach((s, i) => {
     buildSlide(pptx, s, i);
-    const known = ['표지', '목차', '간지', '좌우 2단', '표 중심', '전폭 도식', '숫자 강조', '단계 흐름'];
+    const known = ['표지', '목차', '간지', '좌우 2단', '표 중심', '전폭 도식', '숫자 강조', '단계 흐름', '차트'];
     if (!known.includes(s.layout)) unsupported.push({ number: i + 1, layout: s.layout });
   });
 
@@ -644,13 +763,20 @@ async function main() {
     slides: plan.slides.length,
     canvas: T.canvas,
     images: {
-      embedded: countFigures(plan, (f) => Boolean(f.data)),
+      embedded: countFigures(plan, (f) => Boolean(f.data || f.assetId)),
       from_folder: attached.length,
-      empty: countFigures(plan, (f) => !f.data && !f.file),
+      empty: countFigures(plan, (f) => !f.data && !f.assetId && !f.file),
       dropped_slots: droppedSlots,
     },
     unsupported,
+    overflows,
   }, null, 2));
+
+  if (overflows.length) {
+    console.error(`\n넘침 ${overflows.length}건 — 슬라이드에서 직접 확인하세요:`);
+    overflows.forEach((o) => console.error(
+      `  ${o.slide}쪽 ${o.element}: ${o.needs_in}in 필요 / ${o.has_in}in 확보 (${o.lines}줄) "${o.text}…"`));
+  }
 }
 
 main().catch((error) => {
