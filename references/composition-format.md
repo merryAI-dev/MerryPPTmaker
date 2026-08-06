@@ -99,8 +99,10 @@ Stage 2에서 만드는 `slide_plan.json`의 형식이다. 이 파일 하나가 
 **프리뷰에서 고르기.** 프리뷰를 만들 때 사진 폴더를 함께 넘기면 그 사진들이 갤러리로 실린다.
 
 ```bash
-node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴더 --out preview.html
+node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴더 --serve
 ```
+
+사진이 많으면 `--serve`를 쓴다. 정적 HTML은 사진을 전부 파일 안에 박아 넣어 200장이면 100MB를 넘지만, `--serve`는 사진을 따로 내주어 수백 KB에 그친다.
 
 슬라이드의 이미지 자리를 클릭하면 갤러리가 열리고, 고른 사진이 브라우저에서 1600px / JPEG 품질 0.82로 줄여져 그 자리에 바로 표시된다. 확정 JSON에는 `data`(data URL)와 `w`/`h`로 저장된다.
 

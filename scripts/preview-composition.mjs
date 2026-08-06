@@ -53,7 +53,7 @@ function usage() {
   --serve     검토 화면을 로컬 서버로 띄웁니다. 이때 'PPTX 생성'을 누르면 JSON을
               내려받는 대신 서버가 바로 PPTX까지 만들어 줍니다. 사람이 JSON을
               다시 옮길 필요가 없습니다.
-  --port      --serve 포트. 기본값 8760.
+  --port      --serve 포트. 기본값 18888. 흔히 쓰는 포트와 겹치지 않게 골랐습니다.
   --pptx      --serve에서 만들 PPTX 경로. 기본값은 HTML 옆의 deck.pptx입니다.
 
 장표 형식: ${FORMATS.map((f) => f.name).join(', ')}
@@ -62,7 +62,7 @@ function usage() {
 
 function parseArgs(argv) {
   const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200,
-                 images: '', serve: false, port: 8760, pptx: '' };
+                 images: '', serve: false, port: 18888, pptx: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -93,23 +93,34 @@ function parseArgs(argv) {
   return args;
 }
 
-/** 이미지 폴더를 읽어 갤러리에 실을 목록을 만든다. */
-function loadGallery(dir) {
+const IMG_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+
+/**
+ * 이미지 폴더를 읽어 갤러리에 실을 목록을 만든다.
+ *
+ * inline이면 사진을 base64로 HTML에 박아 넣는다. 파일 하나로 끝나는 대신
+ * 사진이 수백 장이면 HTML이 수십~수백 MB가 되어 브라우저가 멈춘다.
+ * --serve로 띄울 때는 inline을 끄고 서버가 /img/<i>로 원본을 내준다.
+ */
+function loadGallery(dir, inline = true) {
   if (!dir) return [];
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
     throw new Error(`이미지 폴더를 찾을 수 없습니다: ${dir}`);
   }
-  const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
   return fs.readdirSync(dir)
-    .filter((n) => MIME[path.extname(n).toLowerCase()])
+    // 숨김 파일과 맥의 ._ 리소스 파일은 사진이 아니다.
+    .filter((n) => !n.startsWith('.') && IMG_MIME[path.extname(n).toLowerCase()])
     .sort()
-    .map((n) => {
+    .map((n, i) => {
       const file = path.resolve(dir, n);
+      const kb = Math.round(fs.statSync(file).size / 1024);
+      if (!inline) return { name: n, kb, file, data: `/img/${i}` };
       const buf = fs.readFileSync(file);
       return {
         name: n,
-        kb: Math.round(buf.length / 1024),
-        data: `data:${MIME[path.extname(n).toLowerCase()]};base64,${buf.toString('base64')}`,
+        kb,
+        file,
+        data: `data:${IMG_MIME[path.extname(n).toLowerCase()]};base64,${buf.toString('base64')}`,
       };
     });
 }
@@ -1213,18 +1224,27 @@ function main() {
   const unknown = [...new Set(plan.slides.map((s) => s.layout).filter((l) => l && !known.has(l)))];
 
   const outPath = path.resolve(args.out);
-  const gallery = loadGallery(args.images);
+  // --serve면 사진을 HTML에 박지 않고 서버가 내준다. 수백 장이어도 화면이 가볍다.
+  const gallery = loadGallery(args.images, !args.serve);
   const html = buildHtml(plan, args, gallery);
   fs.writeFileSync(outPath, html, 'utf8');
 
+  const mb = fs.statSync(outPath).size / (1024 * 1024);
   console.log(JSON.stringify({
     output: outPath,
     slides: plan.slides.length,
     gallery: gallery.length,
+    html_mb: Number(mb.toFixed(1)),
     unknown_formats: unknown,
   }, null, 2));
 
-  if (args.serve) serve(html, args, outPath);
+  // 사진을 통째로 박은 HTML이 커지면 브라우저가 멈춘다. 미리 알려준다.
+  if (!args.serve && mb > 25) {
+    console.error(`경고: HTML이 ${mb.toFixed(0)}MB입니다. 사진이 많아 브라우저가 멈출 수 있습니다. ` +
+                  `--serve로 띄우면 사진을 따로 내주어 가벼워집니다.`);
+  }
+
+  if (args.serve) serve(html, args, outPath, gallery);
 }
 
 /**
@@ -1232,13 +1252,28 @@ function main() {
  * '확정 저장'이 /build로 들어오면 확정 JSON을 남기고 곧바로 PPTX까지 만든다.
  * 사람이 JSON을 내려받아 다시 넘길 일이 없다.
  */
-function serve(html, args, outPath) {
+function serve(html, args, outPath, gallery = []) {
   const dir = path.dirname(outPath);
   const jsonPath = path.join(dir, 'slide_plan.confirmed.json');
   const pptxPath = path.resolve(args.pptx || path.join(dir, 'deck.pptx'));
   const builder = path.resolve(SELF_DIR, '../components/build-from-plan.mjs');
 
   http.createServer((req, res) => {
+    // 갤러리 사진은 HTML에 박지 않고 여기서 원본 그대로 내준다.
+    const img = /^\/img\/(\d+)$/.exec(req.url || '');
+    if (img) {
+      const item = gallery[Number(img[1])];
+      if (!item || !item.file || !fs.existsSync(item.file)) {
+        res.writeHead(404); res.end('not found'); return;
+      }
+      res.writeHead(200, {
+        'content-type': IMG_MIME[path.extname(item.file).toLowerCase()] || 'application/octet-stream',
+        'cache-control': 'max-age=3600',
+      });
+      fs.createReadStream(item.file).pipe(res);
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/build') {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));

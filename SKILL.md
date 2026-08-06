@@ -357,10 +357,12 @@ node scripts/preview-composition.mjs --plan slide_plan.json --serve --images ~/�
 받은 경로를 `--images`로 넘긴다.
 
 ```bash
-node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴더 --out preview.html
+node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴더 --serve
 ```
 
-폴더의 사진이 프리뷰 안에 갤러리로 실린다. 사용자가 슬라이드의 이미지 자리를 클릭하면 그 사진들 중에서 고르고, 고른 즉시 자리에 표시된다.
+폴더의 사진이 갤러리로 실린다. 사용자가 슬라이드의 이미지 자리를 클릭하면 그 사진들 중에서 고르고, 고른 즉시 자리에 표시된다. 숨김 파일은 걸러진다.
+
+**사진이 많으면 `--serve`로 띄운다.** `--serve` 없이 만든 정적 HTML은 사진을 전부 파일 안에 박아 넣어서, 200장 넘는 폴더면 HTML이 100MB를 넘고 브라우저가 멈춘다. `--serve`는 사진을 따로 내주므로 같은 폴더에서도 HTML이 수백 KB에 그친다. 정적으로 만들 때 25MB를 넘으면 경고가 출력된다.
 
 폴더를 주지 않으면 파일 선택창으로 대체되는데, **샌드박스 브라우저에서는 파일 선택창이 열리지 않을 수 있다.** 그래서 폴더 경로를 받는 쪽이 확실하다. 사진이 아직 없다면 자리표시자 그대로 두고 나중에 `--images`로 빌드할 수 있다고 알린다.
 
