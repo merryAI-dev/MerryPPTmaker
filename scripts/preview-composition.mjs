@@ -148,6 +148,15 @@ function buildHtml(plan, args) {
                 gap:.06in; color:#5b7a99; text-align:center; padding:.1in; }
   .slide .fig b { font-size:10.5pt; }
   .slide .fig span { font-size:9.5pt; color:#7b8ea3; }
+  .slide .fig, .slide .figimg { cursor:pointer; }
+  .slide .fig em, .slide .figimg em { font-style:normal; font-size:8.5pt; color:#8aa0b8;
+                                      margin-top:.04in; }
+  .slide .fig:hover { border-color:var(--cyan); background:#eaf6fd; }
+  .slide .figimg { position:absolute; border-radius:.06in; overflow:hidden;
+                   display:flex; align-items:center; justify-content:center; background:#f4f8fc; }
+  .slide .figimg img { width:100%; height:100%; object-fit:contain; }
+  .slide .figimg em { position:absolute; right:.06in; bottom:.05in; background:#ffffffd0;
+                      padding:1px 6px; border-radius:99px; }
   .slide .flow { position:absolute; display:flex; align-items:stretch; gap:.16in; }
   .slide .fbox { flex:1; border:1pt solid #cfd8e5; border-radius:.06in; padding:.13in;
                  display:flex; flex-direction:column; gap:.07in; background:#fbfdff;
@@ -204,6 +213,8 @@ function buildHtml(plan, args) {
          background:#e9eef5; color:var(--mute); }
   .cnt.ok { background:#dff3e6; color:#1c7a45; }
   .cnt.no { background:#fde9e9; color:#a33; }
+  .hintbox { font-size:11.5px; color:var(--mute); background:#f7f9fc; border:1px solid var(--line);
+             border-radius:7px; padding:8px 9px; line-height:1.5; }
   .cands { display:flex; flex-direction:column; gap:5px; margin-bottom:6px; }
   .cand { text-align:left; font-size:11.5px; line-height:1.5; padding:7px 9px;
           border:1.5px solid var(--line); border-radius:7px; background:#fff; cursor:pointer;
@@ -272,6 +283,11 @@ function buildHtml(plan, args) {
       <button id="next">→</button>
       <select id="move"></select>
     </div>
+    <div id="figwrap" style="display:none">
+      <label>이미지 <span class="cnt" id="figcnt"></span></label>
+      <div class="hintbox">슬라이드의 빗금 자리를 클릭하면 이미지를 고를 수 있습니다.</div>
+      <div class="nav"><button id="figclear">이미지 지우기</button></div>
+    </div>
     <div class="nav">
       <button id="add">+ 장 추가</button>
       <button id="dup">복제</button>
@@ -321,9 +337,15 @@ function chrome(s, i) {
 const bullets = arr => '<ul>' + (arr || []).map(t => '<li>' + lines(t) + '</li>').join('') + '</ul>';
 
 /* 이미지가 들어갈 자리. 빈 공간을 남기지 않고 무엇이 올지 명시한다. */
-const figure = (fig, style) => !fig ? '' :
-  '<div class="fig" style="' + style + '"><b>' + esc(fig.caption || '이미지') + '</b>' +
-  (fig.hint ? '<span>' + esc(fig.hint) + '</span>' : '') + '</div>';
+const figure = (fig, style, key) => !fig ? '' :
+  (fig.data
+    ? '<div class="figimg" style="' + style + '" data-fig="' + key + '">' +
+        '<img src="' + fig.data + '" alt="">' +
+        '<em>바꾸기</em></div>'
+    : '<div class="fig" style="' + style + '" data-fig="' + key + '">' +
+        '<b>' + esc(fig.caption || '이미지') + '</b>' +
+        (fig.hint ? '<span>' + esc(fig.hint) + '</span>' : '') +
+        '<em>클릭해서 이미지 넣기</em></div>');
 
 function renderSlide(s, i) {
   const c = s.content || {};
@@ -355,16 +377,16 @@ function renderSlide(s, i) {
 
   if (f === '좌우 2단') {
     const L = c.left || {}, R = c.right || {};
-    const half = (side, x) => {
+    const half = (side, x, key) => {
       const hasFig = !!side.figure;
       const bodyH = hasFig ? 2.1 : (BOT - CT);
       return '<div class="pill" style="left:' + x + 'in;top:' + PT + 'in;width:5.095in">' + esc(side.pill || '') + '</div>' +
         '<div style="position:absolute;left:' + x + 'in;top:' + CT + 'in;width:5.095in;height:' + bodyH + 'in">' +
           bullets(side.body) + '</div>' +
         figure(side.figure, 'left:' + x + 'in;top:' + (CT + bodyH + 0.12) + 'in;width:5.095in;height:' +
-          (BOT - CT - bodyH - 0.12) + 'in');
+          (BOT - CT - bodyH - 0.12) + 'in', key);
     };
-    inner += half(L, 0.649) + half(R, 5.954);
+    inner += half(L, 0.649, 'left') + half(R, 5.954, 'right');
   } else if (f === '표 중심') {
     const t = c.table || { headers: [], rows: [] };
     const tw = c.figure ? 6.9 : 10.37;
@@ -377,7 +399,7 @@ function renderSlide(s, i) {
         '<tbody>' + (t.rows || []).map(r =>
           '<tr>' + r.map(x => '<td>' + esc(x) + '</td>').join('') + '</tr>').join('') + '</tbody>' +
         '</table></div>' +
-      figure(c.figure, 'left:7.75in;top:' + CT + 'in;width:3.27in;height:' + th + 'in') +
+      figure(c.figure, 'left:7.75in;top:' + CT + 'in;width:3.27in;height:' + th + 'in', 'main') +
       (c.note ? '<div class="note" style="top:' + (BOT - 0.5) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '전폭 도식') {
     const fl = c.flow || [];
@@ -388,7 +410,7 @@ function renderSlide(s, i) {
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + flowH + 'in">' + boxes + '</div>' +
       figure(c.figure, 'left:.649in;top:' + (CT + flowH + 0.16) + 'in;width:10.37in;height:' +
-        (BOT - CT - flowH - 0.16 - (c.note ? 0.75 : 0)) + 'in') +
+        (BOT - CT - flowH - 0.16 - (c.note ? 0.75 : 0)) + 'in', 'main') +
       (c.note ? '<div class="note" style="top:' + (BOT - 0.6) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '단계 흐름') {
     const st = c.steps || [];
@@ -396,7 +418,7 @@ function renderSlide(s, i) {
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:1.5in;gap:.07in">' + steps + '</div>' +
       figure(c.figure, 'left:.649in;top:' + (CT + 1.66) + 'in;width:10.37in;height:' +
-        (BOT - CT - 1.66 - (c.note ? 0.85 : 0)) + 'in') +
+        (BOT - CT - 1.66 - (c.note ? 0.85 : 0)) + 'in', 'main') +
       (c.note ? '<div class="note" style="top:' + (BOT - 0.7) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '숫자 강조') {
     const arr = c.stats || [];
@@ -409,7 +431,7 @@ function renderSlide(s, i) {
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       sts +
       figure(c.figure, 'left:.649in;top:' + (CT + 1.35) + 'in;width:10.37in;height:' +
-        (BOT - CT - 1.35 - (c.note ? 0.85 : 0)) + 'in') +
+        (BOT - CT - 1.35 - (c.note ? 0.85 : 0)) + 'in', 'main') +
       (c.note ? '<div class="note" style="top:' + (BOT - 0.7) + 'in">' + esc(c.note) + '</div>' : '');
   } else {
     inner += '<div class="note" style="top:2.2in">이 형식의 미리보기는 아직 없습니다.</div>';
@@ -463,6 +485,18 @@ function render() {
     '<button class="chip' + (i === cur ? ' on' : '') + '" data-i="' + i + '">' +
       (i + 1) + '. ' + esc((sl.title || '제목 없음').slice(0, 12)) + '</button>').join('');
 
+  const figs = [(s.content || {}).figure,
+                ((s.content || {}).left || {}).figure,
+                ((s.content || {}).right || {}).figure].filter(Boolean);
+  $('figwrap').style.display = figs.length ? '' : 'none';
+  if (figs.length) {
+    const filled = figs.filter(f => f.data).length;
+    const el = $('figcnt');
+    el.textContent = filled + ' / ' + figs.length + '개';
+    el.className = 'cnt ' + (filled === figs.length ? 'ok' : '');
+    $('figclear').disabled = filled === 0;
+  }
+
   $('prev').disabled = cur === 0;
   $('next').disabled = cur === slides.length - 1;
   $('del').disabled = slides.length <= 1;
@@ -498,6 +532,72 @@ $('intro').addEventListener('input', e => {
   [...$('cands').children].forEach(x => x.classList.remove('on'));
   counts(); redrawSlide();
 });
+
+/* ── 이미지 넣기 ──────────────────────────────────────────────
+   브라우저는 고른 파일의 경로를 알려주지 않는다. 그래서 내용을 읽어
+   축소한 뒤 확정 JSON에 data URL로 심는다. 빌더가 그대로 디코드한다. */
+const MAX_PX = 1600, JPEG_Q = 0.82;
+const fileInput = document.createElement('input');
+fileInput.type = 'file'; fileInput.accept = 'image/*';
+document.body.appendChild(fileInput);
+let pendingKey = null;
+
+function figOf(key) {
+  const c = slides[cur].content || {};
+  if (key === 'left') return c.left && c.left.figure;
+  if (key === 'right') return c.right && c.right.figure;
+  return c.figure;
+}
+
+function shrink(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, MAX_PX / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const png = /\.png$/i.test(file.name);
+      resolve({
+        data: cv.toDataURL(png ? 'image/png' : 'image/jpeg', JPEG_Q),
+        w: cv.width, h: cv.height, name: file.name,
+      });
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => reject(new Error('이미지를 읽지 못했습니다.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+fileInput.onchange = async () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file || !pendingKey) return;
+  try {
+    const out = await shrink(file);
+    const fig = figOf(pendingKey);
+    if (fig) Object.assign(fig, out);
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
+  fileInput.value = '';
+};
+
+$('slide').addEventListener('click', e => {
+  const box = e.target.closest('[data-fig]');
+  if (!box) return;
+  pendingKey = box.dataset.fig;
+  fileInput.click();
+});
+
+$('figclear').onclick = () => {
+  const c = slides[cur].content || {};
+  [c.figure, c.left && c.left.figure, c.right && c.right.figure].forEach(f => {
+    if (f) { delete f.data; delete f.w; delete f.h; delete f.name; }
+  });
+  render();
+};
 
 $('picker').addEventListener('click', e => {
   const b = e.target.closest('[data-name]'); if (!b) return;

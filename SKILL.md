@@ -321,7 +321,7 @@ node scripts/preview-composition.mjs --plan slide_plan.json --out preview.html
 - **`content`를 채운 뒤에 띄운다.** 제목만 있고 본문이 빈 프리뷰는 검토 자료가 아니다.
 - 모든 본문 슬라이드에 `intro` 리드 문단(150~200자)을 넣는다. 빠뜨리지 않는다.
 - `introOptions`에 후보를 2~3개 담아 사용자가 프리뷰에서 고르게 한다. 작성 기준은 `references/lead-writing.md`.
-- 빈 공간은 `figure`로 무엇이 들어갈지 명시한다.
+- 빈 공간은 `figure`로 무엇이 들어갈지 명시한다. 사용자는 프리뷰에서 그 자리를 클릭해 이미지를 바로 넣을 수 있다.
 - 형식 이름은 한글로만 노출한다. 내부 키를 사용자에게 보여주지 않는다.
 - 사용자가 확정 파일을 주면 그 파일을 Stage 4A의 입력으로 삼는다. 채팅에서 다시 협의하지 않는다.
 
@@ -353,6 +353,14 @@ node components/build-from-plan.mjs --out deck.pptx
 ```
 
 `--plan`을 생략하면 현재 폴더와 `~/Downloads`에서 `slide_plan.confirmed.json`을 자동으로 찾는다. 사용자에게 파일 경로를 묻거나 내용을 붙여달라고 하지 않는다. 프리뷰에서 `확정 저장`을 누른 뒤 바로 이 명령을 실행하면 된다.
+
+이미지가 폴더에 준비되어 있으면 함께 넘긴다. 파일명은 `page_<슬라이드번호>.png|jpg`다.
+
+```bash
+node components/build-from-plan.mjs --images ./images --out deck.pptx
+```
+
+빌드 결과의 `images.empty`가 0이 아니면 아직 자리표시자로 남은 이미지 자리가 있다는 뜻이다. 사용자에게 몇 번 슬라이드에 어떤 이미지가 필요한지 알린다. 임의의 이미지로 채우지 않는다.
 
 빌더는 `references/composition-format.md`의 8종 형식을 모두 그리며, 프리뷰와 같은 좌표를 쓰므로 확정한 모습이 그대로 덱이 된다. 표·텍스트·도형은 PowerPoint 네이티브 객체로 남는다.
 

@@ -41,6 +41,8 @@ function usage() {
            slide_plan.confirmed.json을 자동으로 찾습니다.
   --out    출력 .pptx 경로. 기본값은 ${DEFAULT_OUT}입니다.
   --title  덱 메타데이터 제목. 없으면 plan의 title을 씁니다.
+  --images 이미지 폴더. page_<슬라이드번호>.png|jpg 를 찾아 그 장의 이미지 자리에
+           채웁니다. 프리뷰에서 이미 고른 이미지가 있으면 그쪽이 우선합니다.
 
 지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름
 `);
@@ -77,7 +79,7 @@ function discoverPlan(explicit) {
 }
 
 function parseArgs(argv) {
-  const args = { plan: '', out: DEFAULT_OUT, title: '' };
+  const args = { plan: '', out: DEFAULT_OUT, title: '', images: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -89,6 +91,8 @@ function parseArgs(argv) {
       args.out = value || args.out; i += 1;
     } else if (key === '--title') {
       args.title = value || args.title; i += 1;
+    } else if (key === '--images') {
+      args.images = value || ''; i += 1;
     } else {
       throw new Error(`알 수 없는 인자입니다: ${key}`);
     }
@@ -200,9 +204,38 @@ function note(slide, text, y) {
   });
 }
 
-/** 이미지가 들어갈 자리. 실제 이미지를 넣기 전까지 무엇이 올지 표시한다. */
+/**
+ * 이미지 자리.
+ *
+ * 이미지는 두 경로로 들어온다.
+ *  1. 프리뷰에서 고른 경우 — fig.data에 data URL로 들어 있다
+ *  2. --images 폴더 — page_<n>.png 규칙으로 찾아 fig.file에 채워둔다
+ * 둘 다 없으면 무엇이 올 자리인지 표시만 한다.
+ */
 function figureBox(pptx, slide, fig, x, y, w, h) {
   if (!fig || h <= 0.2) return;
+
+  const src = fig.data
+    ? { data: fig.data }
+    : (fig.file && fs.existsSync(fig.file) ? { path: fig.file } : null);
+
+  if (src) {
+    // pptxgenjs의 sizing에 맡기면 자리에 맞춰 늘어나 비율이 깨진다.
+    // 원본 크기를 읽어 직접 letterbox 계산한다.
+    const dim = fig.w && fig.h
+      ? { w: fig.w, h: fig.h }
+      : imageSize(fig.data ? dataUrlToBuffer(fig.data) : fs.readFileSync(fig.file));
+
+    let box = { x, y, w, h };
+    if (dim) {
+      const scale = Math.min(w / dim.w, h / dim.h);
+      const dw = dim.w * scale;
+      const dh = dim.h * scale;
+      box = { x: x + (w - dw) / 2, y: y + (h - dh) / 2, w: dw, h: dh };
+    }
+    slide.addImage({ ...src, ...box });
+    return;
+  }
   slide.addShape(pptx.ShapeType.roundRect, {
     x, y, w, h,
     fill: { color: 'F4F8FC' },
@@ -396,6 +429,50 @@ function tocSlide(pptx, s) {
   return slide;
 }
 
+/** data URL에서 바이너리만 떼어낸다. */
+function dataUrlToBuffer(dataUrl) {
+  const comma = String(dataUrl).indexOf(',');
+  return Buffer.from(comma > -1 ? dataUrl.slice(comma + 1) : dataUrl, 'base64');
+}
+
+/**
+ * PNG/JPEG 헤더에서 원본 픽셀 크기를 읽는다.
+ * 외부 의존성 없이 비율 계산에 필요한 만큼만 파싱한다.
+ */
+function imageSize(buf) {
+  if (!buf || buf.length < 24) return null;
+
+  // PNG: 8바이트 시그니처 뒤 IHDR에 width/height가 big-endian uint32로 온다.
+  if (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG') {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+
+  // JPEG: SOF 마커를 찾아 그 안의 height/width를 읽는다.
+  if (buf[0] === 0xFF && buf[1] === 0xD8) {
+    let i = 2;
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xFF) { i += 1; continue; }
+      const marker = buf[i + 1];
+      const isSOF = marker >= 0xC0 && marker <= 0xCF
+        && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC;
+      if (isSOF) return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) };
+      i += 2 + buf.readUInt16BE(i + 2);
+    }
+  }
+  return null;
+}
+
+/** 이미지 자리 집계 */
+function countFigures(plan, pred) {
+  let n = 0;
+  plan.slides.forEach((s) => {
+    const c = s.content || {};
+    [c.figure, c.left && c.left.figure, c.right && c.right.figure]
+      .filter(Boolean).forEach((f) => { if (pred(f)) n += 1; });
+  });
+  return n;
+}
+
 /* ── 조립 ────────────────────────────────────────────────────── */
 
 function buildSlide(pptx, s, index) {
@@ -459,6 +536,32 @@ async function main() {
     throw new Error(`브랜드 에셋을 찾을 수 없습니다: ${ASSET_DIR}`);
   }
 
+  // --images 폴더에서 page_<n>.* 를 찾아 아직 비어 있는 자리에 채운다.
+  const attached = [];
+  if (args.images) {
+    if (!fs.existsSync(args.images)) {
+      throw new Error(`이미지 폴더를 찾을 수 없습니다: ${args.images}`);
+    }
+    const files = fs.readdirSync(args.images)
+      .filter((n) => /^page[_-]\d+\.(png|jpe?g)$/i.test(n));
+    const byNum = new Map();
+    files.forEach((n) => byNum.set(Number.parseInt(n.match(/\d+/)[0], 10),
+      path.resolve(args.images, n)));
+
+    plan.slides.forEach((s, i) => {
+      const file = byNum.get(i + 1);
+      if (!file) return;
+      const c = s.content || {};
+      const slot = c.figure
+        || (c.left && c.left.figure)
+        || (c.right && c.right.figure);
+      if (slot && !slot.data && !slot.file) {
+        slot.file = file;
+        attached.push({ slide: i + 1, file: path.basename(file) });
+      }
+    });
+  }
+
   const PptxGenJS = loadPptxGenJS();
   const pptx = new PptxGenJS();
   applyLayout(pptx);
@@ -482,6 +585,11 @@ async function main() {
     plan: planPath,
     slides: plan.slides.length,
     canvas: T.canvas,
+    images: {
+      embedded: countFigures(plan, (f) => Boolean(f.data)),
+      from_folder: attached.length,
+      empty: countFigures(plan, (f) => !f.data && !f.file),
+    },
     unsupported,
   }, null, 2));
 }
