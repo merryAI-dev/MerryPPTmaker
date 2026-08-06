@@ -168,6 +168,9 @@ function chrome(pptx, slide, s, index) {
 
 /** 네이비 pill 소제목 */
 function pill(pptx, slide, text, x, y, w) {
+  // 텍스트 없는 pill은 그냥 빈 네이비 바다. content.pill을 안 쓴 형식(예: 숫자 강조)에서
+  // 그런 바가 생기지 않도록 여기서 한 번에 막는다.
+  if (!String(text ?? '').trim()) return;
   slide.addShape(pptx.ShapeType.roundRect, {
     x, y, w, h: T.pill.h,
     fill: { color: T.color.navy }, line: { type: 'none' }, rectRadius: T.pill.radius,
@@ -359,7 +362,7 @@ function twoColumn(pptx, slide, c, PT, CT, slideNo) {
   const natural = bandWanted(sideFigs)
     ? rows * L.natural.bulletRow + L.natural.bulletPad
     : Number.POSITIVE_INFINITY;
-  const sp = splitBody(CT, natural, false);
+  const sp = splitBody(CT, natural, Boolean(c.note));
   const side = (s, x, i) => {
     if (!s) return;
     pill(pptx, slide, s.pill, x, PT, L.col.w);
@@ -371,6 +374,7 @@ function twoColumn(pptx, slide, c, PT, CT, slideNo) {
   };
   side(c.left, L.col.left, 0);
   side(c.right, L.col.right, 1);
+  note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
 function tableSlide(pptx, slide, c, PT, CT, slideNo) {
@@ -736,10 +740,15 @@ async function main() {
       const file = byNum.get(i + 1);
       if (!file) return;
       const c = s.content || {};
-      const slot = c.figure
-        || (c.left && c.left.figure)
-        || (c.right && c.right.figure);
-      if (slot && !slot.data && !slot.file) {
+      // 프리뷰가 여는 여러 칸 이미지 띠는 content.figures[]에 저장된다.
+      // content.figure / left.figure / right.figure만 보면 그 자리들을 놓친다.
+      const slot = [
+        ...(Array.isArray(c.figures) ? c.figures : []),
+        c.figure,
+        c.left && c.left.figure,
+        c.right && c.right.figure,
+      ].filter(Boolean).find((fig) => !fig.data && !fig.file && !fig.assetId);
+      if (slot) {
         slot.file = file;
         attached.push({ slide: i + 1, file: path.basename(file) });
       }

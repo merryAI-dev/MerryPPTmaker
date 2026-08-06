@@ -554,6 +554,14 @@ function adaptContent(c, target) {
   return c;
 }
 
+/* pill 텍스트가 없으면 그리지 않는다. 빌더의 pill() 가드와 동일한 규칙. */
+const pillDiv = (text, style) => String(text ?? '').trim()
+  ? '<div class="pill" style="' + style + '">' + esc(text) + '</div>' : '';
+
+/* pill 텍스트가 없으면 그리지 않는다. 빌더의 pill() 가드와 동일한 규칙. */
+const pillDiv = (text, style) => String(text ?? '').trim()
+  ? '<div class="pill" style="' + style + '">' + esc(text) + '</div>' : '';
+
 const bullets = arr => '<ul>' + (arr || []).map(t => '<li>' + lines(t) + '</li>').join('') + '</ul>';
 
 /**
@@ -630,22 +638,23 @@ function renderSlide(s, i) {
   if (f === '좌우 2단') {
     const L = c.left || {}, R = c.right || {};
     const rows = Math.max((L.body || []).length, (R.body || []).length, 1);
-    const sp = splitBody(CT, rows * G.natural.bulletRow + G.natural.bulletPad, false);
+    const sp = splitBody(CT, rows * G.natural.bulletRow + G.natural.bulletPad, !!c.note);
     const half = (side, x, key) =>
-      '<div class="pill" style="left:' + x + 'in;top:' + PT + 'in;width:5.095in">' + esc(side.pill || '') + '</div>' +
+      pillDiv(side.pill, 'left:' + x + 'in;top:' + PT + 'in;width:5.095in') +
       '<div style="position:absolute;left:' + x + 'in;top:' + CT + 'in;width:5.095in;height:' + sp.h + 'in">' +
         bullets(side.body) + '</div>' +
       (sp.figH ? figure(orSlot(side.figure), 'left:' + x + 'in;top:' + sp.figY +
         'in;width:5.095in;height:' + sp.figH + 'in', key) : '');
     // 좌우는 이미 2칸이므로 위 도형 수와 맞는다.
-    inner += half(L, 0.649, 'left') + half(R, 5.954, 'right');
+    inner += half(L, 0.649, 'left') + half(R, 5.954, 'right') +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '표 중심') {
     const t = c.table || { headers: [], rows: [] };
     const tw = 10.37;
     const nrows = (t.rows || []).length || 1;
     const sp = splitBody(CT, G.table.headH + nrows * G.table.rowH, !!c.note);
     const th = sp.h;
-    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:' + tw + 'in">' + esc(c.pill || '') + '</div>' +
+    inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:' + tw + 'in') +
       '<div style="position:absolute;left:.649in;top:' + CT + 'in;width:' + tw + 'in;height:' + th + 'in">' +
         '<table style="height:100%">' +
         '<thead><tr>' + (t.headers || []).map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>' +
@@ -661,7 +670,7 @@ function renderSlide(s, i) {
       '<div class="fbox"><b>' + esc(b.head) + '</b><p>' + lines(b.body) + '</p></div>').join('');
     const sp = splitBody(CT, G.natural.flow, !!c.note);
     const flowH = sp.h;
-    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+    inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:10.37in') +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + flowH + 'in">' + boxes + '</div>' +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(fl.length, 1), G.rowGap.flow), sp.figY, sp.figH) +
       (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
@@ -669,7 +678,7 @@ function renderSlide(s, i) {
     const st = c.steps || [];
     const steps = st.map(t => '<div class="step">' + lines(t) + '</div>').join('');
     const spS = splitBody(CT, G.natural.steps, !!c.note);
-    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+    inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:10.37in') +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:1.5in;gap:.07in">' + steps + '</div>' +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(st.length, 1), G.rowGap.steps), spS.figY, spS.figH) +
       (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
@@ -682,7 +691,7 @@ function renderSlide(s, i) {
         '<div><span class="sv">' + esc(x.value) + '</span><span class="su"> ' + esc(x.unit || '') + '</span>' +
         (x.note ? '<span class="sn">(' + esc(x.note) + ')</span>' : '') + '</div></div>').join('');
     const spN = splitBody(CT, G.natural.stats, !!c.note);
-    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+    inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:10.37in') +
       sts +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(arr.length, 1), G.rowGap.stats), spN.figY, spN.figH) +
       (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
@@ -697,7 +706,7 @@ function renderSlide(s, i) {
       return '<div class="gtrack"><span class="glabel">' + esc(r.label) + '</span>' +
         '<div class="gbar-bg"><i class="gbar" style="left:' + left + '%;width:' + width + '%"></i></div></div>';
     }).join('');
-    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+    inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:10.37in') +
       '<div class="gantt" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + spC.h + 'in">' +
         (tracks || '<em>일정 데이터가 없습니다</em>') + '</div>' +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(rows.length, 1), G.rowGap.stats), spC.figY, spC.figH) +
@@ -714,7 +723,7 @@ function renderSlide(s, i) {
       return '<div class="bar"><i style="height:' + pct + '%"></i>' +
         '<b>' + esc(vals[k] ?? '') + '</b><span>' + esc(cat) + '</span></div>';
     }).join('');
-    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+    inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:10.37in') +
       '<div class="chart" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + spC.h + 'in">' +
         (bars || '<em>차트 데이터가 없습니다</em>') + '</div>' +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(cats.length, 1), G.rowGap.stats), spC.figY, spC.figH) +
