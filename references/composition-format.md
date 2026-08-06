@@ -72,7 +72,15 @@ Stage 2에서 만드는 `slide_plan.json`의 형식이다. 이 파일 하나가 
 
 ### 실제 이미지를 넣는 두 가지 방법
 
-**프리뷰에서 고르기.** 슬라이드의 빗금 자리를 클릭하면 파일 선택창이 열린다. 고른 이미지는 브라우저에서 1600px / JPEG 품질 0.82로 줄여 그 자리에 바로 표시되고, 확정 JSON에 `data`(data URL)와 `w`/`h`로 저장된다.
+**프리뷰에서 고르기.** 프리뷰를 만들 때 사진 폴더를 함께 넘기면 그 사진들이 갤러리로 실린다.
+
+```bash
+node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴더 --out preview.html
+```
+
+슬라이드의 이미지 자리를 클릭하면 갤러리가 열리고, 고른 사진이 브라우저에서 1600px / JPEG 품질 0.82로 줄여져 그 자리에 바로 표시된다. 확정 JSON에는 `data`(data URL)와 `w`/`h`로 저장된다.
+
+폴더를 넘기지 않으면 OS 파일 선택창으로 대체되는데, 샌드박스 브라우저에서는 열리지 않을 수 있다. 폴더를 받는 쪽이 확실하다.
 
 ```json
 { "figure": { "caption": "...", "data": "data:image/png;base64,...", "w": 1200, "h": 700 } }

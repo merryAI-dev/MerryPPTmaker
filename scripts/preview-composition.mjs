@@ -42,13 +42,15 @@ function usage() {
   --title  검토 화면 제목입니다.
   --lead-min  리드 문단 최소 글자수. 기본값 150.
   --lead-max  리드 문단 최대 글자수. 기본값 200.
+  --images    이미지 폴더. 폴더 안 사진을 갤러리로 실어 슬라이드의 이미지 자리에
+              골라 넣을 수 있게 합니다.
 
 장표 형식: ${FORMATS.map((f) => f.name).join(', ')}
 `);
 }
 
 function parseArgs(argv) {
-  const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200 };
+  const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200, images: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -64,6 +66,8 @@ function parseArgs(argv) {
       args.leadMin = Number.parseInt(value, 10); i += 1;
     } else if (key === '--lead-max') {
       args.leadMax = Number.parseInt(value, 10); i += 1;
+    } else if (key === '--images') {
+      args.images = value || ''; i += 1;
     } else {
       throw new Error(`알 수 없는 인자입니다: ${key}`);
     }
@@ -71,7 +75,28 @@ function parseArgs(argv) {
   return args;
 }
 
-function buildHtml(plan, args) {
+/** 이미지 폴더를 읽어 갤러리에 실을 목록을 만든다. */
+function loadGallery(dir) {
+  if (!dir) return [];
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    throw new Error(`이미지 폴더를 찾을 수 없습니다: ${dir}`);
+  }
+  const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+  return fs.readdirSync(dir)
+    .filter((n) => MIME[path.extname(n).toLowerCase()])
+    .sort()
+    .map((n) => {
+      const file = path.resolve(dir, n);
+      const buf = fs.readFileSync(file);
+      return {
+        name: n,
+        kb: Math.round(buf.length / 1024),
+        data: `data:${MIME[path.extname(n).toLowerCase()]};base64,${buf.toString('base64')}`,
+      };
+    });
+}
+
+function buildHtml(plan, args, gallery) {
   const slides = plan.slides || [];
   const deckTitle = args.title || plan.title || '슬라이드 구성 검토';
 
@@ -213,6 +238,16 @@ function buildHtml(plan, args) {
          background:#e9eef5; color:var(--mute); }
   .cnt.ok { background:#dff3e6; color:#1c7a45; }
   .cnt.no { background:#fde9e9; color:#a33; }
+  .gallery { display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:9px;
+             max-height:58vh; overflow-y:auto; padding:2px; }
+  .gcard { border:1.5px solid var(--line); border-radius:8px; padding:6px; background:#fff;
+           cursor:pointer; text-align:center; }
+  .gcard:hover { border-color:var(--cyan); background:#f3fbff; }
+  .gcard img { width:100%; height:88px; object-fit:contain; background:#f4f7fb;
+               border-radius:4px; display:block; }
+  .gcard b { display:block; font-size:10.5px; font-weight:600; margin-top:5px;
+             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .gcard span { display:block; font-size:9.5px; color:var(--mute); }
   .hintbox { font-size:11.5px; color:var(--mute); background:#f7f9fc; border:1px solid var(--line);
              border-radius:7px; padding:8px 9px; line-height:1.5; }
   .cands { display:flex; flex-direction:column; gap:5px; margin-bottom:6px; }
@@ -223,13 +258,17 @@ function buildHtml(plan, args) {
   .cand.on { border-color:var(--cyan); background:#f2fbff; }
   .cand i { display:block; font-style:normal; font-size:10px; color:var(--mute); margin-top:3px; }
   .lead-in { font-weight:400; font-size:12px; min-height:62px; }
-  .picker { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .picker { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .opt .mini { display:block; position:relative; width:100%; overflow:hidden;
+               border:1px solid #e3e8f0; border-radius:4px; background:#fff; margin-bottom:5px; }
+  .opt .mini .slide { position:absolute; top:0; left:0; transform-origin:top left;
+                      box-shadow:none; pointer-events:none; }
+  .opt .d { display:block; font-size:10px; color:var(--mute); line-height:1.35; margin-top:1px; }
   .opt { border:1.5px solid var(--line); border-radius:8px; padding:7px 6px; cursor:pointer;
          background:#fff; text-align:center; }
   .opt:hover { border-color:#b9c4d4; }
   .opt.on { border-color:var(--cyan); background:#f2fbff; box-shadow:0 0 0 3px #59c2e233; }
-  .opt b { display:block; font-size:12px; font-weight:600; }
-  .opt span { display:block; font-size:10px; color:var(--mute); line-height:1.35; margin-top:2px; }
+  .opt b { display:block; font-size:11.5px; font-weight:600; }
 
   select { font:inherit; font-size:12.5px; border:1px solid var(--line); border-radius:7px;
            padding:7px 9px; background:#fff; color:var(--ink); cursor:pointer; }
@@ -285,7 +324,7 @@ function buildHtml(plan, args) {
     </div>
     <div id="figwrap" style="display:none">
       <label>이미지 <span class="cnt" id="figcnt"></span></label>
-      <div class="hintbox">슬라이드의 빗금 자리를 클릭하면 이미지를 고를 수 있습니다.</div>
+      <div class="hintbox" id="fighint"></div>
       <div class="nav"><button id="figclear">이미지 지우기</button></div>
     </div>
     <div class="nav">
@@ -301,6 +340,15 @@ function buildHtml(plan, args) {
 
 <div class="strip" id="strip"></div>
 
+<dialog id="gal">
+  <p class="hint" id="galhint"></p>
+  <div class="gallery" id="gallist"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+    <button id="galclear">이 자리 비우기</button>
+    <button class="primary" id="galclose">닫기</button>
+  </div>
+</dialog>
+
 <dialog id="out">
   <p class="hint">확정된 구성을 <code>slide_plan.confirmed.json</code>으로 저장했습니다. 저장이 안 되면 복사해서 전달하세요.</p>
   <textarea id="json" readonly></textarea>
@@ -312,6 +360,7 @@ function buildHtml(plan, args) {
 
 <script>
 const FORMATS = ${JSON.stringify(FORMATS)};
+const GALLERY = ${JSON.stringify(gallery)};
 let slides = ${JSON.stringify(slides)};
 let cur = 0;
 
@@ -439,6 +488,17 @@ function renderSlide(s, i) {
   return inner;
 }
 
+/** 형식 선택기의 미니 슬라이드를 칸 너비에 맞춰 축소한다. */
+function fitMinis() {
+  document.querySelectorAll('#picker .mini').forEach(box => {
+    const inner = box.firstElementChild;
+    if (!inner) return;
+    const scale = box.clientWidth / (11.693 * 96);
+    inner.style.transform = 'scale(' + scale + ')';
+    box.style.height = (8.267 * 96 * scale) + 'px';
+  });
+}
+
 function fit() {
   const holder = $('holder'), slide = $('slide');
   const w = holder.clientWidth;
@@ -476,9 +536,17 @@ function render() {
     counts();
   }
 
-  $('picker').innerHTML = FORMATS.map(f =>
-    '<button class="opt' + (f.name === s.layout ? ' on' : '') + '" data-name="' + esc(f.name) + '">' +
-      '<b>' + esc(f.name) + '</b><span>' + esc(f.desc) + '</span></button>').join('');
+  // 8종 형식을 이름이 아니라 '이 슬라이드가 그 형식이면 어떻게 보이는지'로 보여준다.
+  $('picker').innerHTML = FORMATS.map(f => {
+    const probe = JSON.parse(JSON.stringify(s));
+    probe.layout = f.name;
+    const cls = f.name === '표지' ? ' cover' : f.name === '간지' ? ' divider'
+              : f.name === '목차' ? ' toc' : '';
+    return '<button class="opt' + (f.name === s.layout ? ' on' : '') + '" data-name="' + esc(f.name) + '">' +
+      '<span class="mini"><span class="slide' + cls + '">' + renderSlide(probe, cur) + '</span></span>' +
+      '<b>' + esc(f.name) + '</b><span class="d">' + esc(f.desc) + '</span></button>';
+  }).join('');
+  fitMinis();
   $('move').innerHTML = slides.map((_, i) =>
     '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + (i + 1) + '번째로</option>').join('');
   $('strip').innerHTML = slides.map((sl, i) =>
@@ -495,6 +563,9 @@ function render() {
     el.textContent = filled + ' / ' + figs.length + '개';
     el.className = 'cnt ' + (filled === figs.length ? 'ok' : '');
     $('figclear').disabled = filled === 0;
+    $('fighint').textContent = GALLERY.length
+      ? '슬라이드의 이미지 자리를 클릭하면 폴더에 있는 사진 ' + GALLERY.length + '장 중에서 고를 수 있습니다.'
+      : '이미지 폴더를 받지 못했습니다. 사진이 있는 폴더 경로를 알려주면 여기서 골라 넣을 수 있습니다.';
   }
 
   $('prev').disabled = cur === 0;
@@ -549,6 +620,26 @@ function figOf(key) {
   return c.figure;
 }
 
+function shrinkDataUrl(dataUrl, name) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, MAX_PX / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const png = /\.png$/i.test(name || '');
+      resolve({
+        data: cv.toDataURL(png ? 'image/png' : 'image/jpeg', JPEG_Q),
+        w: cv.width, h: cv.height, name: name || '',
+      });
+    };
+    img.onerror = () => reject(new Error('이미지를 읽지 못했습니다.'));
+    img.src = dataUrl;
+  });
+}
+
 function shrink(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -584,12 +675,50 @@ fileInput.onchange = async () => {
   fileInput.value = '';
 };
 
+async function assign(key, item) {
+  const fig = figOf(key);
+  if (!fig) return;
+  try {
+    const out = await shrinkDataUrl(item.data, item.name);
+    Object.assign(fig, out);
+    render();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 $('slide').addEventListener('click', e => {
   const box = e.target.closest('[data-fig]');
   if (!box) return;
   pendingKey = box.dataset.fig;
-  fileInput.click();
+
+  if (GALLERY.length) {
+    const fig = figOf(pendingKey) || {};
+    $('galhint').textContent =
+      (fig.caption ? '"' + fig.caption + '" 자리에 넣을 사진을 고르세요. ' : '사진을 고르세요. ') +
+      '폴더에 ' + GALLERY.length + '장이 있습니다.';
+    $('gallist').innerHTML = GALLERY.map((g, i) =>
+      '<button class="gcard" data-g="' + i + '">' +
+        '<img src="' + g.data + '" alt="">' +
+        '<b>' + esc(g.name) + '</b><span>' + g.kb + 'KB</span></button>').join('');
+    $('gal').showModal();
+  } else {
+    // 폴더를 받지 못했으면 파일 선택창으로 대체한다. 샌드박스 브라우저에서는 열리지 않을 수 있다.
+    fileInput.click();
+  }
 });
+
+$('gallist').addEventListener('click', async e => {
+  const b = e.target.closest('[data-g]'); if (!b) return;
+  $('gal').close();
+  await assign(pendingKey, GALLERY[+b.dataset.g]);
+});
+$('galclear').onclick = () => {
+  const fig = figOf(pendingKey);
+  if (fig) { delete fig.data; delete fig.w; delete fig.h; delete fig.name; }
+  $('gal').close(); render();
+};
+$('galclose').onclick = () => $('gal').close();
 
 $('figclear').onclick = () => {
   const c = slides[cur].content || {};
@@ -635,7 +764,7 @@ $('confirm').onclick = () => {
 };
 $('copy').onclick = () => navigator.clipboard.writeText($('json').value);
 $('close').onclick = () => $('out').close();
-addEventListener('resize', fit);
+addEventListener('resize', () => { fit(); fitMinis(); });
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if (e.key === 'ArrowLeft' && cur > 0) { cur -= 1; render(); }
@@ -671,11 +800,13 @@ function main() {
   const unknown = [...new Set(plan.slides.map((s) => s.layout).filter((l) => l && !known.has(l)))];
 
   const outPath = path.resolve(args.out);
-  fs.writeFileSync(outPath, buildHtml(plan, args), 'utf8');
+  const gallery = loadGallery(args.images);
+  fs.writeFileSync(outPath, buildHtml(plan, args, gallery), 'utf8');
 
   console.log(JSON.stringify({
     output: outPath,
     slides: plan.slides.length,
+    gallery: gallery.length,
     unknown_formats: unknown,
   }, null, 2));
 }
