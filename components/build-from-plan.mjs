@@ -20,17 +20,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = path.resolve(HERE, '..');
 const DEFAULT_OUT = 'merry-slide-deck.pptx';
 
-/** 프리뷰와 동일한 세로 기준선 */
-const L = {
-  band: T.header.bandH,
-  // 리드 문단은 150~200자라 12pt/10.336in에서 3~4줄이 기본이다.
-  intro: { x: 0.669, y: 1.46, w: 10.336, h: 0.86 },
-  pillTop: 2.42,          // 리드 문단이 있을 때
-  pillTopBare: 1.72,      // 없을 때
-  bottom: 7.62,
-  col: { left: 0.649, right: 5.954, w: 5.095 },
-  full: { x: 0.649, w: 10.37 },
-};
+/**
+ * 배치 격자는 mysc-proposal.mjs의 토큰에서 가져온다.
+ * 프리뷰도 같은 토큰을 읽으므로 확정한 모습과 결과가 어긋나지 않는다.
+ */
+const L = { band: T.header.bandH, ...T.grid };
 
 function usage() {
   console.log(`사용법:
@@ -205,6 +199,36 @@ function note(slide, text, y) {
 }
 
 /**
+ * 내용이 쓸 높이와 남는 하단 공간을 나눈다.
+ * 남는 곳은 이미지 띠가 된다. 슬라이드 아래를 비워두지 않는 것이 이 톤의 기본이다.
+ */
+function splitBody(CT, naturalH, hasNote) {
+  const avail = L.bottom - (hasNote ? L.noteH : 0) - CT;
+  const h = Math.max(0.6, Math.min(naturalH, avail));
+  const rest = avail - h - L.figGap;
+  return { h, figY: CT + h + L.figGap, figH: rest > L.figMin ? rest : 0 };
+}
+
+/** n등분 좌표. 하단 이미지 띠를 위 도형과 같은 격자에 올린다. */
+function evenCols(x0, total, n, gap) {
+  const each = (total - gap * (n - 1)) / n;
+  return Array.from({ length: n }, (_, i) => ({ x: x0 + i * (each + gap), w: each }));
+}
+
+/**
+ * 하단 이미지 띠를 위 도형 개수만큼 나눠 그린다.
+ * 위가 4칸이면 아래도 4칸. 격자가 어긋나면 슬라이드가 흐트러져 보인다.
+ */
+function figureRow(pptx, slide, c, cols, y, h) {
+  if (!h) return;
+  const arr = c.figures || (c.figure ? [c.figure] : []);
+  cols.forEach((col, i) => figureBox(pptx, slide, orSlot(arr[i]), col.x, y, col.w, h));
+}
+
+/** 선언된 이미지 자리가 없어도 남는 공간은 이미지 자리로 연다. */
+const orSlot = (fig) => fig || { caption: '이미지 자리', hint: '사진을 넣어 주세요' };
+
+/**
  * 이미지 자리.
  *
  * 이미지는 두 경로로 들어온다.
@@ -254,15 +278,14 @@ function figureBox(pptx, slide, fig, x, y, w, h) {
 /* ── 형식별 조립 ─────────────────────────────────────────────── */
 
 function twoColumn(pptx, slide, c, PT, CT) {
+  const rows = Math.max(((c.left || {}).body || []).length,
+    ((c.right || {}).body || []).length, 1);
+  const sp = splitBody(CT, rows * L.natural.bulletRow + L.natural.bulletPad, false);
   const side = (s, x) => {
     if (!s) return;
     pill(pptx, slide, s.pill, x, PT, L.col.w);
-    const bodyH = s.figure ? 2.1 : L.bottom - CT;
-    bullets(slide, s.body, x, CT, L.col.w, bodyH);
-    if (s.figure) {
-      figureBox(pptx, slide, s.figure, x, CT + bodyH + 0.12, L.col.w,
-        L.bottom - CT - bodyH - 0.12);
-    }
+    bullets(slide, s.body, x, CT, L.col.w, sp.h);
+    if (sp.figH) figureBox(pptx, slide, orSlot(s.figure), x, sp.figY, L.col.w, sp.figH);
   };
   side(c.left, L.col.left);
   side(c.right, L.col.right);
@@ -270,8 +293,10 @@ function twoColumn(pptx, slide, c, PT, CT) {
 
 function tableSlide(pptx, slide, c, PT, CT) {
   const t = c.table || { headers: [], rows: [] };
-  const tw = c.figure ? 6.9 : L.full.w;
-  const th = L.bottom - CT - (c.note ? 0.62 : 0);
+  const tw = L.full.w;
+  const nrows = (t.rows || []).length || 1;
+  const sp = splitBody(CT, L.table.headH + nrows * L.table.rowH, Boolean(c.note));
+  const th = sp.h;
   pill(pptx, slide, c.pill, L.full.x, PT, tw);
 
   const cols = (t.headers || []).length || 1;
@@ -297,15 +322,17 @@ function tableSlide(pptx, slide, c, PT, CT) {
     valign: 'middle', margin: 3,
   });
 
-  if (c.figure) figureBox(pptx, slide, c.figure, 7.75, CT, 3.27, th);
-  note(slide, c.note, L.bottom - 0.5);
+  figureRow(pptx, slide, c,
+    evenCols(L.full.x, L.full.w, Math.max((t.headers || []).length, 1), L.rowGap.table),
+    sp.figY, sp.figH);
+  note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
 function diagramSlide(pptx, slide, c, PT, CT) {
   const flow = c.flow || [];
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
-  // 상단 정렬이라 박스가 너무 높으면 속이 비어 보인다. 3.2in로 제한한다.
-  const flowH = c.figure ? 2.3 : Math.min(3.2, L.bottom - CT - (c.note ? 0.9 : 0));
+  const sp = splitBody(CT, L.natural.flow, Boolean(c.note));
+  const flowH = sp.h;
 
   if (flow.length) {
     const gap = 0.16;
@@ -337,15 +364,14 @@ function diagramSlide(pptx, slide, c, PT, CT) {
     });
   }
 
-  if (c.figure) {
-    figureBox(pptx, slide, c.figure, L.full.x, CT + flowH + 0.16, L.full.w,
-      L.bottom - CT - flowH - 0.16 - (c.note ? 0.75 : 0));
-  }
-  note(slide, c.note, L.bottom - 0.6);
+  figureRow(pptx, slide, c,
+    evenCols(L.full.x, L.full.w, Math.max(flow.length, 1), L.rowGap.flow), sp.figY, sp.figH);
+  note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
 function stepsSlide(pptx, slide, c, PT, CT) {
   const steps = c.steps || [];
+  const sp = splitBody(CT, L.natural.steps, Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
 
   if (steps.length) {
@@ -365,15 +391,14 @@ function stepsSlide(pptx, slide, c, PT, CT) {
     });
   }
 
-  if (c.figure) {
-    figureBox(pptx, slide, c.figure, L.full.x, CT + 1.66, L.full.w,
-      L.bottom - CT - 1.66 - (c.note ? 0.85 : 0));
-  }
-  note(slide, c.note, L.bottom - 0.7);
+  figureRow(pptx, slide, c,
+    evenCols(L.full.x, L.full.w, Math.max(steps.length, 1), L.rowGap.steps), sp.figY, sp.figH);
+  note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
 function statsSlide(pptx, slide, c, PT, CT) {
   const stats = c.stats || [];
+  const sp = splitBody(CT, L.natural.stats, Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
 
   const gap = L.full.w / Math.max(stats.length, 1);
@@ -394,11 +419,9 @@ function statsSlide(pptx, slide, c, PT, CT) {
     });
   });
 
-  if (c.figure) {
-    figureBox(pptx, slide, c.figure, L.full.x, CT + 1.32, L.full.w,
-      L.bottom - CT - 1.32 - (c.note ? 0.85 : 0));
-  }
-  note(slide, c.note, L.bottom - 0.7);
+  figureRow(pptx, slide, c,
+    evenCols(L.full.x, L.full.w, Math.max(stats.length, 1), L.rowGap.stats), sp.figY, sp.figH);
+  note(slide, c.note, L.bottom - L.noteH + 0.14);
 }
 
 function tocSlide(pptx, s) {

@@ -17,6 +17,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { T } from '../components/mysc-proposal.mjs';
 
 const DEFAULT_OUT = 'slide-composition-preview.html';
 
@@ -159,11 +160,11 @@ function buildHtml(plan, args, gallery) {
   /* 헤더는 라벨 띠다. 한 줄 높이로 고정하고 여백을 최소화한다.
      레퍼런스 실측 헤더 행 중앙값 0.275in. 남는 세로 공간은 본문 행이 흡수한다. */
   .slide thead th { background:var(--tint); color:var(--navy); font-weight:700; text-align:center;
-                    height:.275in; padding:.03in .08in; line-height:1.25; }
+                    height:${T.grid.table.headH}in; padding:.03in .08in; line-height:1.25; }
   .slide tbody td:first-child { font-weight:600; background:#f7fbfe; }
 
   /* 본문 리드 문단: 레퍼런스 21개 본문 슬라이드 전부에 있는 y=1.503 / 12pt / 10.336in 문단 */
-  .slide .intro { position:absolute; left:.669in; top:1.46in; width:10.336in; height:.86in;
+  .slide .intro { position:absolute; left:${T.grid.intro.x}in; top:${T.grid.intro.y}in; width:${T.grid.intro.w}in; height:${T.grid.intro.h}in;
                   font-size:12pt; line-height:1.35; color:#1a2233; overflow:hidden; }
   .slide .note { position:absolute; left:.649in; width:10.37in; font-size:10pt; color:#5b6678;
                  line-height:1.55; }
@@ -361,6 +362,8 @@ function buildHtml(plan, args, gallery) {
 <script>
 const FORMATS = ${JSON.stringify(FORMATS)};
 const GALLERY = ${JSON.stringify(gallery)};
+/* 배치 격자는 components/mysc-proposal.mjs의 토큰에서 온다. 빌더와 같은 값이다. */
+const G = ${JSON.stringify(T.grid)};
 let slides = ${JSON.stringify(slides)};
 let cur = 0;
 
@@ -383,7 +386,131 @@ function chrome(s, i) {
     '<i class="rule"></i>';
 }
 
+
+/* ── 형식 변환 ────────────────────────────────────────────────
+   형식을 바꾸면 내용도 그 형식에 맞게 옮겨야 한다. 라벨만 바꾸면
+   화면도 비고 빌드 결과도 빈 슬라이드가 된다.
+
+   원래 내용은 지우지 않고 남겨둔다. 되돌아오면 그대로 복구된다. */
+
+/** 어떤 형식이든 공통으로 뽑을 수 있는 항목 목록으로 정규화한다. */
+function extractItems(c) {
+  const out = [];
+  const push = (label, detail, extra) => {
+    if (label == null || String(label).trim() === '') return;
+    out.push({ label: String(label), detail: detail ? String(detail) : '', ...(extra || {}) });
+  };
+
+  if (c.stats && c.stats.length) {
+    c.stats.forEach(s => push(s.label, s.note, { value: s.value, unit: s.unit, note: s.note }));
+  } else if (c.table && (c.table.rows || []).length) {
+    c.table.rows.forEach(r => push(r[0], r.slice(1).filter(Boolean).join(' · ')));
+  } else if (c.flow && c.flow.length) {
+    c.flow.forEach(f => push(f.head, (f.body || '').replace(/\\n/g, ' ')));
+  } else if (c.steps && c.steps.length) {
+    c.steps.forEach(s => push(String(s).replace(/\\n/g, ' ')));
+  } else if (c.left || c.right) {
+    [c.left, c.right].filter(Boolean).forEach(side => (side.body || []).forEach(b => push(b)));
+  } else if (c.items && c.items.length) {
+    c.items.forEach(i => push(i));
+  }
+  return out;
+}
+
+/** 숫자로 시작하는 항목에서 수치와 단위를 떼어낸다. */
+function splitValue(text) {
+  const m = String(text).match(/(\\d[\\d,.]*)\\s*([가-힣%A-Za-z]{0,4})/);
+  return m ? { value: m[1], unit: m[2] || '' } : null;
+}
+
+/**
+ * 목표 형식에 필요한 필드가 없으면 기존 내용에서 만들어 채운다.
+ * 이미 있으면 손대지 않는다.
+ */
+function adaptContent(c, target) {
+  const items = extractItems(c);
+  const heading = (c.pill || (c.left && c.left.pill) || '항목');
+
+  if (target === '좌우 2단' && !c.left && !c.right) {
+    const half = Math.ceil(items.length / 2) || 1;
+    c.left = { pill: heading, body: items.slice(0, half).map(i => i.label) };
+    c.right = { pill: '이어서', body: items.slice(half).map(i => i.label) };
+  }
+
+  if (target === '표 중심' && !(c.table && (c.table.rows || []).length)) {
+    c.table = {
+      headers: ['구분', '내용'],
+      rows: (items.length ? items : [{ label: '내용', detail: '' }])
+        .map(i => [i.label, i.detail || (i.value ? i.value + (i.unit || '') : '')]),
+    };
+    if (!c.pill) c.pill = heading;
+  }
+
+  if (target === '전폭 도식' && !(c.flow && c.flow.length)) {
+    const src = items.length ? items.slice(0, 4) : [{ label: '내용', detail: '' }];
+    c.flow = src.map(i => ({ head: i.label, body: i.detail || '' }));
+    if (!c.pill) c.pill = heading;
+  }
+
+  if (target === '단계 흐름' && !(c.steps && c.steps.length)) {
+    const src = items.length ? items.slice(0, 5) : [{ label: '내용' }];
+    c.steps = src.map(i => i.label);
+    if (!c.pill) c.pill = heading;
+  }
+
+  if (target === '숫자 강조' && !(c.stats && c.stats.length)) {
+    const src = items.length ? items.slice(0, 3) : [{ label: '지표' }];
+    c.stats = src.map(i => {
+      const v = i.value ? { value: i.value, unit: i.unit || '' }
+                        : (splitValue(i.detail || i.label) || { value: '—', unit: '' });
+      return { label: i.label, value: v.value, unit: v.unit, note: i.note || '' };
+    });
+    if (!c.pill) c.pill = heading;
+  }
+
+  if ((target === '목차' || target === '간지') && !(c.items && c.items.length)) {
+    c.items = (items.length ? items : [{ label: '내용' }]).slice(0, 5).map(i => i.label);
+  }
+
+  if (target === '표지' && !c.subtitle) {
+    c.subtitle = c.intro || '';
+  }
+  return c;
+}
+
 const bullets = arr => '<ul>' + (arr || []).map(t => '<li>' + lines(t) + '</li>').join('') + '</ul>';
+
+/**
+ * 내용이 쓸 높이와 남는 하단 공간을 나눈다.
+ * 남는 곳은 이미지 띠가 된다. 슬라이드 아래를 비워두지 않는 것이 이 톤의 기본이다.
+ */
+function splitBody(CT, naturalH, hasNote) {
+  const avail = G.bottom - (hasNote ? G.noteH : 0) - CT;
+  const h = Math.max(0.6, Math.min(naturalH, avail));
+  const rest = avail - h - G.figGap;
+  return { h, figY: CT + h + G.figGap, figH: rest > G.figMin ? rest : 0 };
+}
+
+/** 선언된 이미지 자리가 없어도 남는 공간은 이미지 자리로 연다. */
+const orSlot = fig => fig || { caption: '이미지 자리', hint: '클릭해서 사진을 넣으세요' };
+
+/**
+ * 하단 이미지 띠를 위 도형 개수만큼 나눈다.
+ * 위가 4칸이면 아래도 4칸, x좌표와 폭을 그대로 맞춘다. 격자가 어긋나지 않게 하는 규칙이다.
+ */
+function figureRow(c, cols, y, h) {
+  if (!h) return '';
+  const arr = c.figures || (c.figure ? [c.figure] : []);
+  return cols.map((col, i) =>
+    figure(orSlot(arr[i]), 'left:' + col.x + 'in;top:' + y + 'in;width:' + col.w +
+      'in;height:' + h + 'in', 'fig' + i)).join('');
+}
+
+/** n등분 좌표. 전체 폭 안에서 gap을 둔다. */
+function evenCols(x0, total, n, gap) {
+  const each = (total - gap * (n - 1)) / n;
+  return Array.from({ length: n }, (_, i) => ({ x: +(x0 + i * (each + gap)).toFixed(3), w: +each.toFixed(3) }));
+}
 
 /* 이미지가 들어갈 자리. 빈 공간을 남기지 않고 무엇이 올지 명시한다. */
 const figure = (fig, style, key) => !fig ? '' :
@@ -420,27 +547,28 @@ function renderSlide(s, i) {
   /* 본문 슬라이드: 크롬 + 리드 문단. 콘텐츠는 2.18in부터 7.62in까지 채운다. */
   let inner = chrome(s, i) +
     (c.intro ? '<div class="intro">' + lines(c.intro) + '</div>' : '');
-  const PT = c.intro ? 2.42 : 1.72;   // pill top (리드 문단 3~4줄 수용)
-  const CT = PT + 0.44;               // content top
-  const BOT = 7.62;                   // 콘텐츠 하단 한계
+  const PT = c.intro ? G.pillTop : G.pillTopBare;
+  const CT = PT + G.contentGap;
+  const BOT = G.bottom;
 
   if (f === '좌우 2단') {
     const L = c.left || {}, R = c.right || {};
-    const half = (side, x, key) => {
-      const hasFig = !!side.figure;
-      const bodyH = hasFig ? 2.1 : (BOT - CT);
-      return '<div class="pill" style="left:' + x + 'in;top:' + PT + 'in;width:5.095in">' + esc(side.pill || '') + '</div>' +
-        '<div style="position:absolute;left:' + x + 'in;top:' + CT + 'in;width:5.095in;height:' + bodyH + 'in">' +
-          bullets(side.body) + '</div>' +
-        figure(side.figure, 'left:' + x + 'in;top:' + (CT + bodyH + 0.12) + 'in;width:5.095in;height:' +
-          (BOT - CT - bodyH - 0.12) + 'in', key);
-    };
+    const rows = Math.max((L.body || []).length, (R.body || []).length, 1);
+    const sp = splitBody(CT, rows * G.natural.bulletRow + G.natural.bulletPad, false);
+    const half = (side, x, key) =>
+      '<div class="pill" style="left:' + x + 'in;top:' + PT + 'in;width:5.095in">' + esc(side.pill || '') + '</div>' +
+      '<div style="position:absolute;left:' + x + 'in;top:' + CT + 'in;width:5.095in;height:' + sp.h + 'in">' +
+        bullets(side.body) + '</div>' +
+      (sp.figH ? figure(orSlot(side.figure), 'left:' + x + 'in;top:' + sp.figY +
+        'in;width:5.095in;height:' + sp.figH + 'in', key) : '');
+    // 좌우는 이미 2칸이므로 위 도형 수와 맞는다.
     inner += half(L, 0.649, 'left') + half(R, 5.954, 'right');
   } else if (f === '표 중심') {
     const t = c.table || { headers: [], rows: [] };
-    const tw = c.figure ? 6.9 : 10.37;
-    // 표가 남는 세로 공간을 채우도록 높이를 명시한다. 행은 균등 분배된다.
-    const th = BOT - CT - (c.note ? 0.62 : 0);
+    const tw = 10.37;
+    const nrows = (t.rows || []).length || 1;
+    const sp = splitBody(CT, G.table.headH + nrows * G.table.rowH, !!c.note);
+    const th = sp.h;
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:' + tw + 'in">' + esc(c.pill || '') + '</div>' +
       '<div style="position:absolute;left:.649in;top:' + CT + 'in;width:' + tw + 'in;height:' + th + 'in">' +
         '<table style="height:100%">' +
@@ -448,27 +576,27 @@ function renderSlide(s, i) {
         '<tbody>' + (t.rows || []).map(r =>
           '<tr>' + r.map(x => '<td>' + esc(x) + '</td>').join('') + '</tr>').join('') + '</tbody>' +
         '</table></div>' +
-      figure(c.figure, 'left:7.75in;top:' + CT + 'in;width:3.27in;height:' + th + 'in', 'main') +
-      (c.note ? '<div class="note" style="top:' + (BOT - 0.5) + 'in">' + esc(c.note) + '</div>' : '');
+      figureRow(c, evenCols(G.full.x, G.full.w, Math.max((t.headers || []).length, 1), G.rowGap.table), sp.figY, sp.figH) +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '전폭 도식') {
     const fl = c.flow || [];
     const boxes = fl.map((b, k) =>
       (k ? '<span class="farrow">›</span>' : '') +
       '<div class="fbox"><b>' + esc(b.head) + '</b><p>' + lines(b.body) + '</p></div>').join('');
-    const flowH = c.figure ? 2.3 : Math.min(3.2, BOT - CT - (c.note ? 0.9 : 0));
+    const sp = splitBody(CT, G.natural.flow, !!c.note);
+    const flowH = sp.h;
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + flowH + 'in">' + boxes + '</div>' +
-      figure(c.figure, 'left:.649in;top:' + (CT + flowH + 0.16) + 'in;width:10.37in;height:' +
-        (BOT - CT - flowH - 0.16 - (c.note ? 0.75 : 0)) + 'in', 'main') +
-      (c.note ? '<div class="note" style="top:' + (BOT - 0.6) + 'in">' + esc(c.note) + '</div>' : '');
+      figureRow(c, evenCols(G.full.x, G.full.w, Math.max(fl.length, 1), G.rowGap.flow), sp.figY, sp.figH) +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '단계 흐름') {
     const st = c.steps || [];
     const steps = st.map(t => '<div class="step">' + lines(t) + '</div>').join('');
+    const spS = splitBody(CT, G.natural.steps, !!c.note);
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:1.5in;gap:.07in">' + steps + '</div>' +
-      figure(c.figure, 'left:.649in;top:' + (CT + 1.66) + 'in;width:10.37in;height:' +
-        (BOT - CT - 1.66 - (c.note ? 0.85 : 0)) + 'in', 'main') +
-      (c.note ? '<div class="note" style="top:' + (BOT - 0.7) + 'in">' + esc(c.note) + '</div>' : '');
+      figureRow(c, evenCols(G.full.x, G.full.w, Math.max(st.length, 1), G.rowGap.steps), spS.figY, spS.figH) +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '숫자 강조') {
     const arr = c.stats || [];
     const gap = 10.37 / Math.max(arr.length, 1);
@@ -477,11 +605,11 @@ function renderSlide(s, i) {
         '<div class="sl" style="height:.4in">' + esc(x.label) + '</div>' +
         '<div><span class="sv">' + esc(x.value) + '</span><span class="su"> ' + esc(x.unit || '') + '</span>' +
         (x.note ? '<span class="sn">(' + esc(x.note) + ')</span>' : '') + '</div></div>').join('');
+    const spN = splitBody(CT, G.natural.stats, !!c.note);
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       sts +
-      figure(c.figure, 'left:.649in;top:' + (CT + 1.35) + 'in;width:10.37in;height:' +
-        (BOT - CT - 1.35 - (c.note ? 0.85 : 0)) + 'in', 'main') +
-      (c.note ? '<div class="note" style="top:' + (BOT - 0.7) + 'in">' + esc(c.note) + '</div>' : '');
+      figureRow(c, evenCols(G.full.x, G.full.w, Math.max(arr.length, 1), G.rowGap.stats), spN.figY, spN.figH) +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else {
     inner += '<div class="note" style="top:2.2in">이 형식의 미리보기는 아직 없습니다.</div>';
   }
@@ -540,6 +668,7 @@ function render() {
   $('picker').innerHTML = FORMATS.map(f => {
     const probe = JSON.parse(JSON.stringify(s));
     probe.layout = f.name;
+    probe.content = adaptContent(probe.content || {}, f.name);
     const cls = f.name === '표지' ? ' cover' : f.name === '간지' ? ' divider'
               : f.name === '목차' ? ' toc' : '';
     return '<button class="opt' + (f.name === s.layout ? ' on' : '') + '" data-name="' + esc(f.name) + '">' +
@@ -553,9 +682,9 @@ function render() {
     '<button class="chip' + (i === cur ? ' on' : '') + '" data-i="' + i + '">' +
       (i + 1) + '. ' + esc((sl.title || '제목 없음').slice(0, 12)) + '</button>').join('');
 
-  const figs = [(s.content || {}).figure,
-                ((s.content || {}).left || {}).figure,
-                ((s.content || {}).right || {}).figure].filter(Boolean);
+  const cc = s.content || {};
+  const figs = [...(cc.figures || []), cc.figure,
+                (cc.left || {}).figure, (cc.right || {}).figure].filter(Boolean);
   $('figwrap').style.display = figs.length ? '' : 'none';
   if (figs.length) {
     const filled = figs.filter(f => f.data).length;
@@ -615,9 +744,16 @@ let pendingKey = null;
 
 function figOf(key) {
   const c = slides[cur].content || {};
-  if (key === 'left') return c.left && c.left.figure;
-  if (key === 'right') return c.right && c.right.figure;
-  return c.figure;
+  if (key === 'left') return (c.left = c.left || {}), (c.left.figure = c.left.figure || {});
+  if (key === 'right') return (c.right = c.right || {}), (c.right.figure = c.right.figure || {});
+  const m = /^fig(\\d+)$/.exec(key);
+  if (m) {
+    c.figures = c.figures || (c.figure ? [c.figure] : []);
+    const i = Number(m[1]);
+    while (c.figures.length <= i) c.figures.push({});
+    return c.figures[i];
+  }
+  return (c.figure = c.figure || {});
 }
 
 function shrinkDataUrl(dataUrl, name) {
@@ -722,7 +858,7 @@ $('galclose').onclick = () => $('gal').close();
 
 $('figclear').onclick = () => {
   const c = slides[cur].content || {};
-  [c.figure, c.left && c.left.figure, c.right && c.right.figure].forEach(f => {
+  [...(c.figures || []), c.figure, c.left && c.left.figure, c.right && c.right.figure].forEach(f => {
     if (f) { delete f.data; delete f.w; delete f.h; delete f.name; }
   });
   render();
@@ -730,7 +866,10 @@ $('figclear').onclick = () => {
 
 $('picker').addEventListener('click', e => {
   const b = e.target.closest('[data-name]'); if (!b) return;
-  slides[cur].layout = b.dataset.name; render();
+  const s = slides[cur];
+  s.layout = b.dataset.name;
+  s.content = adaptContent(s.content || {}, s.layout);
+  render();
 });
 $('strip').addEventListener('click', e => {
   const b = e.target.closest('[data-i]'); if (!b) return;
