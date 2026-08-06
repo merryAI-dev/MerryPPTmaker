@@ -378,6 +378,14 @@ node components/build-from-plan.mjs --images ./images --out deck.pptx
 
 빌드 결과의 `images.empty`가 0이 아니면 아직 자리표시자로 남은 이미지 자리가 있다는 뜻이다. 사용자에게 몇 번 슬라이드에 어떤 이미지가 필요한지 알린다. 임의의 이미지로 채우지 않는다.
 
+사진 없이 최종본을 내야 하면 빈 자리를 지운다.
+
+```bash
+node components/build-from-plan.mjs --drop-empty-figures --out deck.pptx
+```
+
+빈 줄은 콘텐츠가 차지하므로 표와 도식이 더 크게 들어간다. 작업 중에는 옵션을 켜지 않는다. 채워야 할 곳이 보이는 편이 낫다.
+
 빌더는 `references/composition-format.md`의 8종 형식을 모두 그리며, 프리뷰와 같은 좌표를 쓰므로 확정한 모습이 그대로 덱이 된다. 표·텍스트·도형은 PowerPoint 네이티브 객체로 남는다.
 
 새 컴포넌트가 필요할 때만 직접 스크립트를 작성한다. `components/example-mysc-deck.mjs`가 참고 예시다.

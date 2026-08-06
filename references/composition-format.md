@@ -118,7 +118,17 @@ node components/build-from-plan.mjs --images ./images --out deck.pptx
 
 한 장에 이미지 자리가 여러 개면 첫 번째 자리에만 붙는다. 프리뷰에서 이미 고른 이미지가 있으면 그쪽이 우선한다.
 
-빌드 결과에 `images: { embedded, from_folder, empty }`가 나온다. `empty`가 0이 아니면 아직 자리표시자로 남은 곳이 있다는 뜻이다.
+빌드 결과에 `images: { embedded, from_folder, empty, dropped_slots }`가 나온다. `empty`가 0이 아니면 아직 자리표시자로 남은 곳이 있다는 뜻이다.
+
+**최종본을 낼 때는 빈 자리를 지운다.**
+
+```bash
+node components/build-from-plan.mjs --drop-empty-figures --out deck.pptx
+```
+
+사진이 없는 자리는 빗금 박스를 그리지 않는다. 한 줄이 통째로 비면 그 공간까지 콘텐츠가 차지하므로 표는 더 넓게, 도식은 더 크게 들어간다. 일부만 비어 있으면 채워진 칸만 남기고 격자는 유지한다.
+
+옵션을 켜지 않으면 자리표시자가 그대로 남는다. 작업 중에는 무엇을 채워야 하는지 보이는 편이 낫기 때문이다.
 
 ### 이미지는 비율을 유지한 채 들어간다
 

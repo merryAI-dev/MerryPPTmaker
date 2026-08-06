@@ -37,6 +37,9 @@ function usage() {
   --title  덱 메타데이터 제목. 없으면 plan의 title을 씁니다.
   --images 이미지 폴더. page_<슬라이드번호>.png|jpg 를 찾아 그 장의 이미지 자리에
            채웁니다. 프리뷰에서 이미 고른 이미지가 있으면 그쪽이 우선합니다.
+  --drop-empty-figures
+           사진이 없는 이미지 자리를 빗금 박스로 남기지 않고 지웁니다. 한 줄이
+           통째로 비면 그 공간까지 콘텐츠가 차지합니다. 최종본을 낼 때 씁니다.
 
 지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름
 `);
@@ -73,7 +76,7 @@ function discoverPlan(explicit) {
 }
 
 function parseArgs(argv) {
-  const args = { plan: '', out: DEFAULT_OUT, title: '', images: '' };
+  const args = { plan: '', out: DEFAULT_OUT, title: '', images: '', dropEmpty: false };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -87,6 +90,8 @@ function parseArgs(argv) {
       args.title = value || args.title; i += 1;
     } else if (key === '--images') {
       args.images = value || ''; i += 1;
+    } else if (key === '--drop-empty-figures') {
+      args.dropEmpty = true;
     } else {
       throw new Error(`알 수 없는 인자입니다: ${key}`);
     }
@@ -221,12 +226,33 @@ function evenCols(x0, total, n, gap) {
  */
 function figureRow(pptx, slide, c, cols, y, h) {
   if (!h) return;
-  const arr = c.figures || (c.figure ? [c.figure] : []);
-  cols.forEach((col, i) => figureBox(pptx, slide, orSlot(arr[i]), col.x, y, col.w, h));
+  const arr = figuresOf(c);
+  cols.forEach((col, i) => {
+    if (DROP_EMPTY && !hasImage(arr[i])) { droppedSlots += 1; return; }
+    figureBox(pptx, slide, orSlot(arr[i]), col.x, y, col.w, h);
+  });
 }
 
 /** 선언된 이미지 자리가 없어도 남는 공간은 이미지 자리로 연다. */
 const orSlot = (fig) => fig || { caption: '이미지 자리', hint: '사진을 넣어 주세요' };
+
+/** 실제 사진이 들어 있는 자리인지. */
+const hasImage = (fig) => Boolean(fig && (fig.data || (fig.file && fs.existsSync(fig.file))));
+
+/**
+ * 이 슬라이드의 이미지 자리 목록.
+ * 좌우 2단은 좌/우가 각자 하나씩이라 별도로 다룬다.
+ */
+const figuresOf = (c) => c.figures || (c.figure ? [c.figure] : []);
+
+/**
+ * 하단 이미지 띠를 열어야 하는지 판단한다.
+ * --drop-empty-figures를 켰고 사진이 하나도 없으면 띠를 만들지 않는다.
+ * 그 공간은 콘텐츠가 가져간다.
+ */
+let DROP_EMPTY = false;
+let droppedSlots = 0;
+const bandWanted = (figs) => !DROP_EMPTY || figs.some(hasImage);
 
 /**
  * 이미지 자리.
@@ -280,12 +306,18 @@ function figureBox(pptx, slide, fig, x, y, w, h) {
 function twoColumn(pptx, slide, c, PT, CT) {
   const rows = Math.max(((c.left || {}).body || []).length,
     ((c.right || {}).body || []).length, 1);
-  const sp = splitBody(CT, rows * L.natural.bulletRow + L.natural.bulletPad, false);
+  const sideFigs = [c.left, c.right].filter(Boolean).map((s) => s.figure);
+  const natural = bandWanted(sideFigs)
+    ? rows * L.natural.bulletRow + L.natural.bulletPad
+    : Number.POSITIVE_INFINITY;
+  const sp = splitBody(CT, natural, false);
   const side = (s, x) => {
     if (!s) return;
     pill(pptx, slide, s.pill, x, PT, L.col.w);
     bullets(slide, s.body, x, CT, L.col.w, sp.h);
-    if (sp.figH) figureBox(pptx, slide, orSlot(s.figure), x, sp.figY, L.col.w, sp.figH);
+    if (!sp.figH) return;
+    if (DROP_EMPTY && !hasImage(s.figure)) { droppedSlots += 1; return; }
+    figureBox(pptx, slide, orSlot(s.figure), x, sp.figY, L.col.w, sp.figH);
   };
   side(c.left, L.col.left);
   side(c.right, L.col.right);
@@ -295,7 +327,8 @@ function tableSlide(pptx, slide, c, PT, CT) {
   const t = c.table || { headers: [], rows: [] };
   const tw = L.full.w;
   const nrows = (t.rows || []).length || 1;
-  const sp = splitBody(CT, L.table.headH + nrows * L.table.rowH, Boolean(c.note));
+  const sp = splitBody(CT, bandWanted(figuresOf(c))
+    ? L.table.headH + nrows * L.table.rowH : Number.POSITIVE_INFINITY, Boolean(c.note));
   const th = sp.h;
   pill(pptx, slide, c.pill, L.full.x, PT, tw);
 
@@ -331,7 +364,7 @@ function tableSlide(pptx, slide, c, PT, CT) {
 function diagramSlide(pptx, slide, c, PT, CT) {
   const flow = c.flow || [];
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
-  const sp = splitBody(CT, L.natural.flow, Boolean(c.note));
+  const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.flow : Number.POSITIVE_INFINITY, Boolean(c.note));
   const flowH = sp.h;
 
   if (flow.length) {
@@ -371,7 +404,7 @@ function diagramSlide(pptx, slide, c, PT, CT) {
 
 function stepsSlide(pptx, slide, c, PT, CT) {
   const steps = c.steps || [];
-  const sp = splitBody(CT, L.natural.steps, Boolean(c.note));
+  const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.steps : Number.POSITIVE_INFINITY, Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
 
   if (steps.length) {
@@ -398,7 +431,7 @@ function stepsSlide(pptx, slide, c, PT, CT) {
 
 function statsSlide(pptx, slide, c, PT, CT) {
   const stats = c.stats || [];
-  const sp = splitBody(CT, L.natural.stats, Boolean(c.note));
+  const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.stats : Number.POSITIVE_INFINITY, Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
 
   const gap = L.full.w / Math.max(stats.length, 1);
@@ -585,6 +618,8 @@ async function main() {
     });
   }
 
+  DROP_EMPTY = args.dropEmpty;
+
   const PptxGenJS = loadPptxGenJS();
   const pptx = new PptxGenJS();
   applyLayout(pptx);
@@ -612,6 +647,7 @@ async function main() {
       embedded: countFigures(plan, (f) => Boolean(f.data)),
       from_folder: attached.length,
       empty: countFigures(plan, (f) => !f.data && !f.file),
+      dropped_slots: droppedSlots,
     },
     unsupported,
   }, null, 2));
