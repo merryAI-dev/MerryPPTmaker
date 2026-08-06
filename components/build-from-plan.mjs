@@ -284,20 +284,10 @@ function figureBox(pptx, slide, fig, x, y, w, h) {
     : (fig.file && fs.existsSync(fig.file) ? { path: fig.file } : null);
 
   if (src) {
-    // pptxgenjs의 sizing에 맡기면 자리에 맞춰 늘어나 비율이 깨진다.
-    // 원본 크기를 읽어 직접 letterbox 계산한다.
-    const dim = fig.w && fig.h
-      ? { w: fig.w, h: fig.h }
-      : imageSize(data ? dataUrlToBuffer(data) : fs.readFileSync(fig.file));
-
-    let box = { x, y, w, h };
-    if (dim) {
-      const scale = Math.min(w / dim.w, h / dim.h);
-      const dw = dim.w * scale;
-      const dh = dim.h * scale;
-      box = { x: x + (w - dw) / 2, y: y + (h - dh) / 2, w: dw, h: dh };
-    }
-    slide.addImage({ ...src, ...box });
+    // 자리 크기에 맞춰 늘리거나 줄여서 넣는다.
+    // 원본을 잘라내지 않으므로 비율이 다르면 그만큼 변형된다.
+    // 자리에 맞는 비율의 사진을 준비하는 편이 낫다.
+    slide.addImage({ ...src, x, y, w, h });
     return;
   }
   slide.addShape(pptx.ShapeType.roundRect, {
@@ -599,39 +589,6 @@ function tocSlide(pptx, s) {
     });
   });
   return slide;
-}
-
-/** data URL에서 바이너리만 떼어낸다. */
-function dataUrlToBuffer(dataUrl) {
-  const comma = String(dataUrl).indexOf(',');
-  return Buffer.from(comma > -1 ? dataUrl.slice(comma + 1) : dataUrl, 'base64');
-}
-
-/**
- * PNG/JPEG 헤더에서 원본 픽셀 크기를 읽는다.
- * 외부 의존성 없이 비율 계산에 필요한 만큼만 파싱한다.
- */
-function imageSize(buf) {
-  if (!buf || buf.length < 24) return null;
-
-  // PNG: 8바이트 시그니처 뒤 IHDR에 width/height가 big-endian uint32로 온다.
-  if (buf[0] === 0x89 && buf.toString('latin1', 1, 4) === 'PNG') {
-    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
-  }
-
-  // JPEG: SOF 마커를 찾아 그 안의 height/width를 읽는다.
-  if (buf[0] === 0xFF && buf[1] === 0xD8) {
-    let i = 2;
-    while (i + 9 < buf.length) {
-      if (buf[i] !== 0xFF) { i += 1; continue; }
-      const marker = buf[i + 1];
-      const isSOF = marker >= 0xC0 && marker <= 0xCF
-        && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC;
-      if (isSOF) return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) };
-      i += 2 + buf.readUInt16BE(i + 2);
-    }
-  }
-  return null;
 }
 
 /** 이미지 자리 집계 */

@@ -181,7 +181,8 @@ function buildHtml(plan, args, gallery) {
   .slide .fig:hover { border-color:var(--cyan); background:#eaf6fd; }
   .slide .figimg { position:absolute; border-radius:.06in; overflow:hidden;
                    display:flex; align-items:center; justify-content:center; background:#f4f8fc; }
-  .slide .figimg img { width:100%; height:100%; object-fit:contain; }
+  /* 빌더와 같은 방식. 자리 크기에 맞춰 늘리고 줄인다. 잘라내지 않는다. */
+  .slide .figimg img { width:100%; height:100%; object-fit:fill; }
   .slide .figimg em { position:absolute; right:.06in; bottom:.05in; background:#ffffffd0;
                       padding:1px 6px; border-radius:99px; }
   .slide .flow { position:absolute; display:flex; align-items:stretch; gap:.16in; }
