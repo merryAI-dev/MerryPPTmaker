@@ -260,7 +260,27 @@ node components/build-from-plan.mjs --drop-empty-figures --out deck.pptx
 }
 ```
 
-`type`은 `bar` `line` `pie` `doughnut`을 쓴다. `column`은 `bar`와 같다.
+`type`은 `bar` `line` `pie` `doughnut` `gantt`를 쓴다. `column`은 `bar`와 같다.
+
+**간트(`gantt`)는 데이터 구조가 다르다.**
+
+```json
+{
+  "chart": {
+    "type": "gantt",
+    "gantt": {
+      "unit": "월",
+      "maxUnit": 9,
+      "rows": [
+        { "label": "선발 및 OT", "start": 0, "duration": 1 },
+        { "label": "역량진단·멘토링", "start": 1, "duration": 3 }
+      ]
+    }
+  }
+}
+```
+
+`start`/`duration`은 같은 단위(주·월 등)의 숫자다. `maxUnit`을 생략하면 `start+duration` 최댓값으로 축을 잡는다. 누적 가로 막대로 그려지며 시작 구간은 투명, 기간 구간만 브랜드 색이다 — PowerPoint·엑셀에서 간트차트를 만드는 표준 방식이고, 일정이 바뀌면 사용자가 값만 고치면 된다.
 
 **PowerPoint 네이티브 차트로 들어간다.** 이미지로 굽지 않으므로 사용자가 데이터를 직접 고칠 수 있다. 발표 직전에 숫자가 바뀌는 일이 흔하기 때문이다.
 

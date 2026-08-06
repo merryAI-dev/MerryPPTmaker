@@ -204,6 +204,13 @@ function buildHtml(plan, args, gallery) {
   .slide .chart .bar b { font-size:9.5pt; color:var(--navy); margin-top:.03in; }
   .slide .chart .bar span { font-size:9.5pt; color:#5b6678; }
   .slide .chart em { font-style:normal; font-size:11pt; color:#a33; margin:auto; }
+  .slide .gantt { position:absolute; display:flex; flex-direction:column; justify-content:space-evenly;
+                  border-top:.5pt solid #c3ccd9; padding-top:.05in; }
+  .slide .gtrack { display:grid; grid-template-columns:2in 1fr; align-items:center; gap:.1in; }
+  .slide .glabel { font-size:10.5pt; color:#1a2233; text-align:right; }
+  .slide .gbar-bg { position:relative; height:.28in; }
+  .slide .gbar { position:absolute; top:0; height:100%; background:var(--navy); border-radius:2px; }
+  .slide .gantt em { font-style:normal; font-size:11pt; color:#a33; }
   .slide .stat { position:absolute; }
   .slide .stat .sl { font-size:10.8pt; color:#000; margin-bottom:.05in; }
   .slide .sv { font-size:30.2pt; font-weight:700; color:#000; line-height:1; }
@@ -678,6 +685,22 @@ function renderSlide(s, i) {
     inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
       sts +
       figureRow(c, evenCols(G.full.x, G.full.w, Math.max(arr.length, 1), G.rowGap.stats), spN.figY, spN.figH) +
+      (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
+  } else if (f === '차트' && (c.chart || {}).type === 'gantt') {
+    const g = (c.chart || {}).gantt || {};
+    const rows = g.rows || [];
+    const spC = splitBody(CT, G.natural.chart, !!c.note);
+    const max = g.maxUnit || Math.max(1, ...rows.map(r => r.start + r.duration));
+    const tracks = rows.map(r => {
+      const left = (r.start / max) * 100;
+      const width = (r.duration / max) * 100;
+      return '<div class="gtrack"><span class="glabel">' + esc(r.label) + '</span>' +
+        '<div class="gbar-bg"><i class="gbar" style="left:' + left + '%;width:' + width + '%"></i></div></div>';
+    }).join('');
+    inner += '<div class="pill" style="left:.649in;top:' + PT + 'in;width:10.37in">' + esc(c.pill || '') + '</div>' +
+      '<div class="gantt" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + spC.h + 'in">' +
+        (tracks || '<em>일정 데이터가 없습니다</em>') + '</div>' +
+      figureRow(c, evenCols(G.full.x, G.full.w, Math.max(rows.length, 1), G.rowGap.stats), spC.figY, spC.figH) +
       (c.note ? '<div class="note" style="top:' + (BOT - G.noteH + 0.14) + 'in">' + esc(c.note) + '</div>' : '');
   } else if (f === '차트') {
     const ch = c.chart || {};

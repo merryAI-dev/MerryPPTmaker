@@ -41,7 +41,7 @@ function usage() {
            사진이 없는 이미지 자리를 빗금 박스로 남기지 않고 지웁니다. 한 줄이
            통째로 비면 그 공간까지 콘텐츠가 차지합니다. 최종본을 낼 때 씁니다.
 
-지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름, 차트
+지원 형식: 표지, 목차, 간지, 좌우 2단, 표 중심, 전폭 도식, 숫자 강조, 단계 흐름, 차트(막대/선/파이/도넛/간트)
 `);
 }
 
@@ -513,11 +513,20 @@ function statsSlide(pptx, slide, c, PT, CT, slideNo) {
  */
 function chartSlide(pptx, slide, c, PT, CT, slideNo) {
   const ch = c.chart || {};
-  const kind = { bar: 'bar', column: 'bar', line: 'line', pie: 'pie', doughnut: 'doughnut' }[ch.type] || 'bar';
   const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.chart : Number.POSITIVE_INFINITY,
     Boolean(c.note));
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
 
+  if (ch.type === 'gantt') {
+    ganttChart(pptx, slide, ch.gantt || {}, L.full.x, CT, L.full.w, sp.h);
+    figureRow(pptx, slide, c,
+      evenCols(L.full.x, L.full.w, Math.max(((ch.gantt || {}).rows || []).length || 1, 1), L.rowGap.stats),
+      sp.figY, sp.figH);
+    note(slide, c.note, L.bottom - L.noteH + 0.14);
+    return;
+  }
+
+  const kind = { bar: 'bar', column: 'bar', line: 'line', pie: 'pie', doughnut: 'doughnut' }[ch.type] || 'bar';
   const series = (ch.series || []).map((s) => ({
     name: s.name || '',
     labels: ch.categories || [],
@@ -561,6 +570,50 @@ function chartSlide(pptx, slide, c, PT, CT, slideNo) {
     evenCols(L.full.x, L.full.w, Math.max((ch.categories || []).length || 1, 1), L.rowGap.stats),
     sp.figY, sp.figH);
   note(slide, c.note, L.bottom - L.noteH + 0.14);
+}
+
+/**
+ * 간트차트. 누적 가로 막대로 만든다 — 시작 구간은 투명, 기간 구간만 브랜드 색.
+ * PowerPoint/엑셀에서 간트차트를 만드는 표준 방식이며, 네이티브 차트라 일정이
+ * 바뀌면 사용자가 셀 값만 고치면 된다.
+ */
+function ganttChart(pptx, slide, gantt, x, y, w, h) {
+  const rows = gantt.rows || [];
+  if (!rows.length) {
+    slide.addText('일정 데이터가 없습니다.', {
+      x, y, w, h, fontFace: T.font.family, fontSize: 12, color: 'A33333',
+      align: 'center', valign: 'middle', margin: 0,
+    });
+    return;
+  }
+  // 첫 행이 위로 오도록 뒤집는다. 가로 막대 차트는 아래→위 순서로 그린다.
+  const ordered = [...rows].reverse();
+  const max = gantt.maxUnit || Math.max(...rows.map((r) => r.start + r.duration));
+
+  const series = [
+    { name: '시작', labels: ordered.map((r) => r.label), values: ordered.map((r) => r.start) },
+    { name: '기간', labels: ordered.map((r) => r.label), values: ordered.map((r) => r.duration) },
+  ];
+
+  slide.addChart(pptx.ChartType.bar, series, {
+    x, y, w, h,
+    barDir: 'bar', barGrouping: 'stacked',
+    chartColors: ['FFFFFF', T.color.navy],
+    showLegend: false,
+    showValue: false,
+    valAxisMinVal: 0, valAxisMaxVal: max,
+    valAxisTitle: gantt.unit || '',
+    showValAxisTitle: Boolean(gantt.unit),
+    catAxisLabelFontFace: T.font.family,
+    catAxisLabelFontSize: 10.5,
+    catAxisLabelColor: '1A2233',
+    valAxisLabelFontFace: T.font.family,
+    valAxisLabelFontSize: 9,
+    valAxisLabelColor: '5B6678',
+    valGridLine: { color: 'E4E9F1', size: 0.5 },
+    catGridLine: { style: 'none' },
+    border: { pt: 0, color: 'FFFFFF' },
+  });
 }
 
 function tocSlide(pptx, s) {
