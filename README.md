@@ -178,11 +178,13 @@ git pull
 
 ## 의존성 설치
 
-Stage 5의 raster PPTX 패키징은 `pptxgenjs`를 사용합니다. 스킬 내부 `vendor/`에 의존성을 설치합니다.
+PPTX를 만드는 두 경로(Native 빌더 `components/build-from-plan.mjs`, Stage 5 raster 패키징) 모두 `pptxgenjs`를 씁니다. **클론 직후 한 번은 반드시 실행해야 합니다.** 스킬 내부 `vendor/`에 설치되며 시스템을 건드리지 않습니다.
 
 ```bash
 bash scripts/setup-deps.sh
 ```
+
+설치 전에 빌더를 돌리면 `pptxgenjs를 찾을 수 없습니다`로 멈추고 이 명령을 안내합니다.
 
 설치 후 구조는 다음과 비슷합니다.
 
@@ -194,6 +196,19 @@ vendor/
 ```
 
 `vendor/`와 생성된 덱 파일은 커밋하지 않습니다.
+
+## 클론에서 덱까지 (3분)
+
+스킬을 통하지 않고 도구만 직접 써 볼 때의 최단 경로입니다. 클론한 폴더에서 실행합니다.
+
+```bash
+bash scripts/setup-deps.sh
+node scripts/preview-composition.mjs --plan slide_plan.json --images ~/사진폴더 --serve
+```
+
+브라우저에서 `http://localhost:18888`을 엽니다. 좌우 화살표로 장을 넘기며 형식과 문구를 고치고, `이 장 확정`을 누른 순서대로 목록이 쌓이고, `PPTX 생성`을 누르면 그 자리에서 PPTX가 만들어집니다. 만들어진 경로는 화면과 터미널에 함께 찍힙니다.
+
+`slide_plan.json`이 아직 없다면 `references/composition-format.md`의 예시를 복사해 시작하면 됩니다.
 
 ## 사용 예시
 
