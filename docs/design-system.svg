@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 470" width="880" height="470" font-family="Pretendard, -apple-system, 'Apple SD Gothic Neo', sans-serif">
+  <defs>
+    <linearGradient id="band" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#091823"/><stop offset="1" stop-color="#0C2044"/>
+    </linearGradient>
+    <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071426"/><stop offset=".3" stop-color="#0d2f5e"/>
+      <stop offset=".62" stop-color="#1e7fa8"/><stop offset=".88" stop-color="#bfe6ef"/>
+      <stop offset="1" stop-color="#eaf6f8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="880" height="470" fill="#ffffff"/>
+
+  <!-- title -->
+  <text x="32" y="40" font-size="19" font-weight="700" fill="#0C2044">Design tokens — 레퍼런스 32장 / 도형 1,031개 실측</text>
+  <text x="32" y="62" font-size="12.5" fill="#6b7688">추측 값 없음. 좌표·색·크기 전부 원본 OOXML에서 직접 읽었습니다.</text>
+
+  <!-- ── palette ── -->
+  <text x="32" y="98" font-size="13" font-weight="700" fill="#1a2233">Palette</text>
+  <g>
+    <rect x="32" y="110" width="96" height="52" rx="6" fill="#0C2044"/>
+    <text x="80" y="182" font-size="10.5" fill="#6b7688" text-anchor="middle">#0C2044</text>
+    <text x="80" y="196" font-size="10" fill="#98a2b3" text-anchor="middle">navy</text>
+
+    <rect x="140" y="110" width="96" height="52" rx="6" fill="#001D45"/>
+    <text x="188" y="182" font-size="10.5" fill="#6b7688" text-anchor="middle">#001D45</text>
+    <text x="188" y="196" font-size="10" fill="#98a2b3" text-anchor="middle">navy deep</text>
+
+    <rect x="248" y="110" width="96" height="52" rx="6" fill="#01397E"/>
+    <text x="296" y="182" font-size="10.5" fill="#6b7688" text-anchor="middle">#01397E</text>
+    <text x="296" y="196" font-size="10" fill="#98a2b3" text-anchor="middle">navy mid</text>
+
+    <rect x="356" y="110" width="96" height="52" rx="6" fill="#59C2E2"/>
+    <text x="404" y="182" font-size="10.5" fill="#6b7688" text-anchor="middle">#59C2E2</text>
+    <text x="404" y="196" font-size="10" fill="#98a2b3" text-anchor="middle">cyan</text>
+
+    <rect x="464" y="110" width="96" height="52" rx="6" fill="#BAE8FB"/>
+    <text x="512" y="182" font-size="10.5" fill="#6b7688" text-anchor="middle">#BAE8FB</text>
+    <text x="512" y="196" font-size="10" fill="#98a2b3" text-anchor="middle">tint</text>
+
+    <rect x="572" y="110" width="96" height="52" rx="6" fill="url(#cover)"/>
+    <text x="620" y="182" font-size="10.5" fill="#6b7688" text-anchor="middle">cover</text>
+    <text x="620" y="196" font-size="10" fill="#98a2b3" text-anchor="middle">gradient</text>
+  </g>
+
+  <!-- ── type scale ── -->
+  <text x="700" y="98" font-size="13" font-weight="700" fill="#1a2233">Type — Pretendard</text>
+  <text x="700" y="126" font-size="19" font-weight="700" fill="#0C2044">44pt 섹션</text>
+  <text x="700" y="150" font-size="13" font-weight="700" fill="#1a2233">14.5 리드문</text>
+  <text x="700" y="170" font-size="11.5" fill="#28313f">12pt 본문</text>
+  <text x="700" y="188" font-size="9.5" fill="#5b6678">8.6–10.8pt 표·각주</text>
+
+  <!-- ── anatomy ── -->
+  <text x="32" y="238" font-size="13" font-weight="700" fill="#1a2233">본문 슬라이드 골격 — 21장에서 좌표가 동일하게 반복된 요소만 규칙으로 인정</text>
+
+  <g transform="translate(32,252)">
+    <rect width="560" height="196" rx="7" fill="#fff" stroke="#dbe1ea"/>
+    <!-- header band -->
+    <rect width="560" height="38" rx="7" fill="url(#band)"/>
+    <rect y="30" width="560" height="8" fill="#0C2044"/>
+    <text x="18" y="24" font-size="11" font-weight="700" fill="#fff">Ⅱ. 사업 개요</text>
+    <text x="132" y="24" font-size="10.5" font-weight="700" fill="#fff">1. 일반현황</text>
+    <text x="500" y="24" font-size="9" font-weight="700" fill="#fff">07 쪽수</text>
+    <!-- lead sentence -->
+    <text x="18" y="58" font-size="10" font-weight="700" fill="#5BBEDE">1-1. MYSC 소개<tspan fill="#01397E"> ｜ </tspan><tspan fill="#1a2233">이 장이 증명할 주장 한 문장</tspan></text>
+    <!-- rule -->
+    <line x1="18" y1="68" x2="542" y2="68" stroke="#001521" stroke-width="1"/>
+    <!-- lead paragraph -->
+    <rect x="18" y="76" width="524" height="22" rx="3" fill="#f4f7fb"/>
+    <text x="24" y="91" font-size="9.5" fill="#5b6678">리드 문단 150–200자 — 본문 21장 전부에 존재</text>
+    <!-- pill -->
+    <rect x="18" y="108" width="250" height="17" rx="8.5" fill="#0C2044"/>
+    <text x="28" y="120" font-size="9" font-weight="700" fill="#fff">섹션 마커 pill · 32장 중 18장에 45회</text>
+    <!-- table -->
+    <rect x="18" y="134" width="250" height="14" fill="#BAE8FB"/>
+    <text x="24" y="144" font-size="8.5" font-weight="700" fill="#0C2044">표 헤더는 한 줄 높이로 좁게</text>
+    <rect x="18" y="148" width="250" height="18" fill="#fff" stroke="#D9D9D9"/>
+    <rect x="18" y="166" width="250" height="18" fill="#fff" stroke="#D9D9D9"/>
+    <!-- stat grid -->
+    <text x="292" y="142" font-size="8.5" fill="#5b6678">누적 투자유치</text>
+    <text x="292" y="162" font-size="19" font-weight="700" fill="#000">1,000<tspan font-size="9" font-weight="400">억원</tspan></text>
+    <text x="292" y="174" font-size="7.5" fill="#5b6678">(2024년 기준)</text>
+    <text x="410" y="142" font-size="8.5" fill="#5b6678">참여 기업</text>
+    <text x="410" y="162" font-size="19" font-weight="700" fill="#000">24<tspan font-size="9" font-weight="400">개사</tspan></text>
+    <text x="410" y="174" font-size="7.5" fill="#5b6678">(2기 누적)</text>
+  </g>
+
+  <!-- annotations -->
+  <g font-size="10" fill="#6b7688">
+    <text x="612" y="266">밴드 높이 0.794in</text>
+    <text x="612" y="286">섹션 라벨 x=0.657 y=0.420</text>
+    <text x="612" y="306">쪽수는 footer가 아니라 우상단 배지</text>
+    <text x="612" y="326">헤더 룰 y=1.343 · 0.5pt · #001521</text>
+    <text x="612" y="346">본문 시작 y≈1.55in</text>
+    <text x="612" y="366">pill = 단색. 그림자·다색 카드 금지</text>
+    <text x="612" y="386">숫자 강조 = 라벨+큰 숫자+각주</text>
+    <text x="612" y="406">표 본문 8.6–10.8pt 상시 사용</text>
+    <text x="612" y="426">캔버스 11.693 × 8.267in (A4 가로)</text>
+  </g>
+</svg>
