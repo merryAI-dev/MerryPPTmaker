@@ -8,3 +8,4 @@ merry-slide-deck.pptx
 
 __pycache__/
 *.pyc
+.gstack/

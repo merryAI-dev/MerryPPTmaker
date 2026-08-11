@@ -107,22 +107,36 @@ function loadGallery(dir, inline = true) {
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
     throw new Error(`이미지 폴더를 찾을 수 없습니다: ${dir}`);
   }
-  return fs.readdirSync(dir)
+  const skipped = [];
+  const items = fs.readdirSync(dir)
     // 숨김 파일과 맥의 ._ 리소스 파일은 사진이 아니다.
     .filter((n) => !n.startsWith('.') && IMG_MIME[path.extname(n).toLowerCase()])
     .sort()
     .map((n, i) => {
       const file = path.resolve(dir, n);
-      const kb = Math.round(fs.statSync(file).size / 1024);
-      if (!inline) return { name: n, kb, file, data: `/img/${i}` };
-      const buf = fs.readFileSync(file);
-      return {
-        name: n,
-        kb,
-        file,
-        data: `data:${IMG_MIME[path.extname(n).toLowerCase()]};base64,${buf.toString('base64')}`,
-      };
-    });
+      // 권한이 막힌 파일이 폴더에 섞여 있을 수 있다. 그 한 장 때문에 전체가 멈추면 안 된다.
+      try {
+        const kb = Math.round(fs.statSync(file).size / 1024);
+        if (!inline) return { name: n, kb, file, data: `/img/${i}` };
+        const buf = fs.readFileSync(file);
+        return {
+          name: n,
+          kb,
+          file,
+          data: `data:${IMG_MIME[path.extname(n).toLowerCase()]};base64,${buf.toString('base64')}`,
+        };
+      } catch (err) {
+        skipped.push(`${n} (${err.code || err.message})`);
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  if (skipped.length) {
+    console.error(`읽지 못해 건너뛴 사진 ${skipped.length}장: ` +
+                  skipped.slice(0, 3).join(', ') + (skipped.length > 3 ? ' 외' : ''));
+  }
+  return items;
 }
 
 function buildHtml(plan, args, gallery) {
@@ -1266,11 +1280,23 @@ function serve(html, args, outPath, gallery = []) {
       if (!item || !item.file || !fs.existsSync(item.file)) {
         res.writeHead(404); res.end('not found'); return;
       }
-      res.writeHead(200, {
-        'content-type': IMG_MIME[path.extname(item.file).toLowerCase()] || 'application/octet-stream',
-        'cache-control': 'max-age=3600',
+      // 사진 한 장을 못 읽는다고 서버가 죽으면 안 된다. macOS 권한(EPERM)으로
+      // 막힌 파일이 데스크톱에 섞여 있는 경우가 실제로 있었다.
+      // 헤더는 파일이 실제로 열린 뒤에 보낸다. 먼저 보내면 못 읽는 사진도
+      // 200으로 나가서 브라우저가 깨진 이미지를 받는다.
+      const stream = fs.createReadStream(item.file);
+      stream.on('error', (err) => {
+        console.error(`사진을 건너뜁니다: ${item.name} (${err.code || err.message})`);
+        if (!res.headersSent) res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('unreadable');
       });
-      fs.createReadStream(item.file).pipe(res);
+      stream.on('open', () => {
+        res.writeHead(200, {
+          'content-type': IMG_MIME[path.extname(item.file).toLowerCase()] || 'application/octet-stream',
+          'cache-control': 'max-age=3600',
+        });
+        stream.pipe(res);
+      });
       return;
     }
 
@@ -1309,6 +1335,12 @@ function serve(html, args, outPath, gallery = []) {
     res.end(html);
   }).listen(args.port, () => {
     console.log(`검토 화면: http://localhost:${args.port}  (PPTX 생성을 누르면 ${pptxPath} 로 바로 만들어집니다)`);
+  });
+
+  // 검토 중에 서버가 내려가면 작업하던 내용을 잃는다. 어떤 예외도 프로세스를
+  // 죽이지 못하게 막고 로그만 남긴다.
+  process.on('uncaughtException', (err) => {
+    console.error(`무시한 오류: ${err.message}`);
   });
 }
 
