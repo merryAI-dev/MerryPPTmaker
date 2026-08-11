@@ -44,10 +44,23 @@ function writeConfig(patch) {
   return next;
 }
 
+/**
+ * 자동 커밋은 설치 경로별로 따로 기억한다. 한 컴퓨터에 쓰기 권한이 있는 클론과
+ * 없는 클론이 같이 있을 수 있는데, 하나로 묶으면 한쪽 설정이 다른 쪽을 덮는다.
+ */
 function autoCommitOn() {
   if (process.env.MERRY_WORKLOG_AUTOCOMMIT === '1') return true;
   if (process.env.MERRY_WORKLOG_AUTOCOMMIT === '0') return false;
-  return readConfig().autocommit === true;
+  const cfg = readConfig();
+  if (cfg.autocommit && typeof cfg.autocommit === 'object') return cfg.autocommit[SKILL_DIR] === true;
+  return cfg.autocommit === true;   // 예전 형식(전체 공통)도 그대로 읽는다
+}
+
+function setAutoCommit(on) {
+  const cfg = readConfig();
+  const map = (cfg.autocommit && typeof cfg.autocommit === 'object') ? cfg.autocommit : {};
+  map[SKILL_DIR] = on;
+  return writeConfig({ autocommit: map });
 }
 
 export function logDir() {
@@ -234,10 +247,10 @@ function gitSetup(apply) {
 
   console.log('');
   if (apply && canPush && inRepo) {
-    writeConfig({ autocommit: true });
+    setAutoCommit(true);
     console.log('자동 커밋을 켰습니다. 이제 미리보기와 PPTX 생성 결과가 자동으로 올라갑니다.\n');
   } else if (apply && !canPush) {
-    writeConfig({ autocommit: false });
+    setAutoCommit(false);
     console.log('push 권한이 없어 자동 커밋을 껐습니다. 기록은 이 컴퓨터에 계속 쌓입니다.\n');
   }
 }
@@ -259,7 +272,7 @@ function cli() {
   } else if (cmd === 'autocommit') {
     const v = rest[0];
     if (v === 'on' || v === 'off') {
-      writeConfig({ autocommit: v === 'on' });
+      setAutoCommit(v === 'on');
       console.log(`자동 커밋을 ${v === 'on' ? '켰습니다' : '껐습니다'}. (${CONFIG_FILE})`);
     } else {
       console.log(`자동 커밋: ${autoCommitOn() ? '켜짐' : '꺼짐'}`);
