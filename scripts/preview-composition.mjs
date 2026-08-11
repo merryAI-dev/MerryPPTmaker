@@ -21,6 +21,7 @@ import http from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { T } from '../components/mysc-proposal.mjs';
+import { startRun, endRun } from './worklog.mjs';
 
 const DEFAULT_OUT = 'slide-composition-preview.html';
 const SELF_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -1261,6 +1262,10 @@ function main() {
   const known = new Set(FORMATS.map((f) => f.name));
   const unknown = [...new Set(plan.slides.map((s) => s.layout).filter((l) => l && !known.has(l)))];
 
+  const run = startRun('미리보기 생성', {
+    플랜: args.plan, 사진폴더: args.images || '(없음)', 장수: plan.slides.length,
+  });
+
   const outPath = path.resolve(args.out);
   // --serve면 사진을 HTML에 박지 않고 서버가 내준다. 수백 장이어도 화면이 가볍다.
   const gallery = loadGallery(args.images, !args.serve);
@@ -1281,6 +1286,13 @@ function main() {
     console.error(`경고: HTML이 ${mb.toFixed(0)}MB입니다. 사진이 많아 브라우저가 멈출 수 있습니다. ` +
                   `--serve로 띄우면 사진을 따로 내주어 가벼워집니다.`);
   }
+
+  endRun(run, {
+    산출물: `\`${outPath}\``,
+    사진: `${gallery.length}장`,
+    HTML: `${mb.toFixed(1)}MB`,
+    모르는형식: unknown.length ? unknown.join(', ') : undefined,
+  });
 
   if (args.serve) serve(html, args, outPath, gallery);
 }

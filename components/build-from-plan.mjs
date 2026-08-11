@@ -15,6 +15,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { applyLayout, coverSlide, sectionDivider, T, ASSET_DIR } from './mysc-proposal.mjs';
+import { startRun, endRun } from '../scripts/worklog.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL_DIR = path.resolve(HERE, '..');
@@ -755,6 +756,10 @@ async function main() {
     });
   }
 
+  const run = startRun('PPTX 생성', {
+    플랜: planPath, 장수: plan.slides.length, 빈자리제거: args.dropEmpty ? '예' : '아니오',
+  });
+
   DROP_EMPTY = args.dropEmpty;
   ASSETS = plan.assets || {};
 
@@ -790,6 +795,14 @@ async function main() {
     unsupported,
     overflows,
   }, null, 2));
+
+  endRun(run, {
+    산출물: `\`${outPath}\``,
+    사진: `${countFigures(plan, (f) => Boolean(f.data || f.assetId))}장 포함, ` +
+          `빈 자리 ${countFigures(plan, (f) => !f.data && !f.assetId && !f.file)}개`,
+    글자넘침: overflows.length ? `${overflows.length}건` : '없음',
+    미지원형식: unsupported.length ? `${unsupported.length}건` : undefined,
+  });
 
   if (overflows.length) {
     console.error(`\n넘침 ${overflows.length}건 — 슬라이드에서 직접 확인하세요:`);
