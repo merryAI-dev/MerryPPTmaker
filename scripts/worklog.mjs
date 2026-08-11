@@ -168,7 +168,9 @@ function gitCommit(push, quiet = false) {
   } catch (err) {
     logFailure('푸시', err);
     const msg = String(err.stderr || err.message);
-    const denied = /denied|403|not have permission|Authentication/i.test(msg);
+    // GitHub는 권한이 없을 때도 "Repository not found"로 답한다. 있는 저장소인데
+    // 없다고 나오면 대개 권한 문제다. 인증 창을 못 띄운 경우도 같이 묶는다.
+    const denied = /denied|403|not have permission|Authentication|Repository not found|could not read Username/i.test(msg);
     if (quiet) return;
     console.error(denied
       ? '푸시 권한이 없습니다. 기록은 이 컴퓨터에만 남았습니다.\n' +
