@@ -350,6 +350,10 @@ function buildHtml(plan, args, gallery) {
   .nav { display:flex; gap:7px; align-items:center; margin-top:12px; flex-wrap:wrap; }
   .nav .spacer { flex:1; }
 
+  .offline { display:none; position:fixed; left:0; right:0; top:0; z-index:99;
+             background:#a33; color:#fff; font-size:13px; font-weight:600;
+             padding:9px 16px; text-align:center; }
+  .offline.on { display:block; }
   .striphead { font-size:12px; font-weight:700; color:var(--ink); margin:16px 0 8px; }
   .strip { display:flex; gap:5px; flex-wrap:wrap; padding-top:10px;
            border-top:1px solid var(--line); }
@@ -366,6 +370,7 @@ function buildHtml(plan, args, gallery) {
   .hint { font-size:12px; color:var(--mute); margin:0 0 10px; }
 </style>
 
+<div class="offline" id="offline">미리보기 서버가 꺼졌습니다. 지금 화면에서 계속 고칠 수는 있지만 PPTX 생성은 안 됩니다. 터미널에서 다시 띄워 주세요.</div>
 <h1>${String(deckTitle).replace(/[<&]/g, '')}</h1>
 <p class="sub">실제 문구를 넣은 미리보기입니다. 장을 넘기며 <b>이 장 확정</b>을 누르면 누른 순서대로 쌓이고, 다 고른 뒤 <b>PPTX 생성</b>을 누르면 그 순서로 만들어집니다. ← → 키로 이동합니다.</p>
 
@@ -1154,6 +1159,19 @@ function packConfirmed() {
   return { title: ${JSON.stringify(deckTitle)}, assets: pool, slides: packed };
 }
 
+/* 서버가 죽으면 화면이 먼저 안다. 눌러 보고 나서 알면 늦다. */
+if (SERVE) {
+  setInterval(async () => {
+    let alive = false;
+    try {
+      const r = await fetch('/ping', { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+      alive = r.ok;
+    } catch { alive = false; }
+    $('offline').classList.toggle('on', !alive);
+    $('build').disabled = !alive || !confirmed.length;
+  }, 5000);
+}
+
 /* 생성은 따로다. 확정 목록이 곧 덱이 된다. */
 $('build').onclick = () => {
   if (!confirmed.length) return;
@@ -1178,8 +1196,14 @@ $('build').onclick = () => {
         $('out').showModal();
       })
       .catch(e => {
-        $('outhint').innerHTML = '<span style="color:#a33">' + esc(e.message) + '</span><br>' +
-          '아래 JSON을 복사해서 전달하면 수동으로 만들 수 있습니다.';
+        // 서버가 죽은 것과 빌드가 실패한 것은 다르다. 구분해서 말한다.
+        const down = (e instanceof TypeError);
+        $('outhint').innerHTML = down
+          ? '<b style="color:#a33">미리보기 서버가 응답하지 않습니다.</b><br>' +
+            '터미널에서 미리보기가 꺼졌는지 확인하고 다시 띄워 주세요. ' +
+            '작업한 내용은 아래 JSON에 그대로 있으니 복사해 두면 잃지 않습니다.'
+          : '<span style="color:#a33">' + esc(e.message) + '</span><br>' +
+            '아래 JSON을 복사해서 전달하면 수동으로 만들 수 있습니다.';
         $('out').showModal();
       })
       .finally(() => { btn.disabled = false; btn.innerHTML = label; render(); });
@@ -1273,6 +1297,13 @@ function serve(html, args, outPath, gallery = []) {
   const builder = path.resolve(SELF_DIR, '../components/build-from-plan.mjs');
 
   http.createServer((req, res) => {
+    // 화면이 서버 생존을 확인하는 통로. preflight도 이걸로 우리 서버인지 가린다.
+    if (req.url === '/ping') {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('merry-slide');
+      return;
+    }
+
     // 갤러리 사진은 HTML에 박지 않고 여기서 원본 그대로 내준다.
     const img = /^\/img\/(\d+)$/.exec(req.url || '');
     if (img) {
