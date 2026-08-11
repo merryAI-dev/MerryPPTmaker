@@ -63,11 +63,59 @@ function setAutoCommit(on) {
   return writeConfig({ autocommit: map });
 }
 
+/**
+ * 기록은 클론 밖에 쌓는다.
+ *
+ * 저장소 안에 두면 다시 클론하거나 폴더를 지우는 순간 전부 사라진다.
+ * 스킬은 갈아엎을 수 있어도 작업 기록은 남아야 한다. 저장소 안의 worklog/는
+ * 원본이 아니라 공유용 사본이다(publish가 채운다).
+ */
+const STORE_DIR = path.join(os.homedir(), '.merry-slide', 'worklog');
+const REPO_LOG_DIR = path.join(SKILL_DIR, 'worklog');
+
 export function logDir() {
   const raw = process.env.MERRY_WORKLOG_DIR;
-  const dir = raw ? raw.replace(/^~/, os.homedir()) : path.join(SKILL_DIR, 'worklog');
+  const dir = raw ? raw.replace(/^~/, os.homedir()) : STORE_DIR;
   fs.mkdirSync(dir, { recursive: true });
+  migrateFromRepo(dir);
   return dir;
+}
+
+/**
+ * 예전 버전은 저장소 안에 기록했다. 그 기록을 밖으로 옮겨 준다.
+ * 같은 달 파일이 양쪽에 있으면 이어 붙인다. 지우지 않는다.
+ */
+let migrated = false;
+function migrateFromRepo(dir) {
+  if (migrated || dir === REPO_LOG_DIR || !fs.existsSync(REPO_LOG_DIR)) return;
+  migrated = true;
+  try {
+    for (const n of fs.readdirSync(REPO_LOG_DIR)) {
+      if (!/^\d{4}-\d{2}\.md$/.test(n)) continue;
+      const from = path.join(REPO_LOG_DIR, n);
+      const to = path.join(dir, n);
+      const body = fs.readFileSync(from, 'utf8');
+      if (fs.existsSync(to)) {
+        if (!fs.readFileSync(to, 'utf8').includes(body.trim().slice(0, 200))) {
+          fs.appendFileSync(to, `\n${body}`);
+        }
+      } else {
+        fs.writeFileSync(to, body);
+      }
+    }
+  } catch { /* 옮기기 실패로 기록 자체를 막지 않는다 */ }
+}
+
+/** 쌓아 둔 기록을 저장소 안으로 복사한다. 커밋 대상은 이 사본이다. */
+function publish() {
+  const src = logDir();
+  if (src === REPO_LOG_DIR) return REPO_LOG_DIR;
+  fs.mkdirSync(REPO_LOG_DIR, { recursive: true });
+  for (const n of fs.readdirSync(src)) {
+    if (!/^\d{4}-\d{2}\.md$/.test(n)) continue;    // 오류 로그 같은 건 올리지 않는다
+    fs.copyFileSync(path.join(src, n), path.join(REPO_LOG_DIR, n));
+  }
+  return REPO_LOG_DIR;
 }
 
 /** 월 단위 파일 하나. 하루 단위로 쪼개면 파일만 늘고 훑어보기 나쁘다. */
@@ -131,8 +179,6 @@ export function endRun(run, result = {}) {
  * 실패해도 조용히 로그만 남긴다. 기록을 못 올린 것 때문에 제안서 작업이 멈추면 곤란하다.
  */
 function autoCommit() {
-  const dir = logDir();
-  if (!dir.startsWith(SKILL_DIR)) return;   // 저장소 밖 기록은 올릴 곳이 없다
   const child = spawn(process.execPath,
     [fileURLToPath(import.meta.url), 'commit', '--push', '--quiet'],
     { detached: true, stdio: 'ignore', cwd: SKILL_DIR });
@@ -148,14 +194,8 @@ export function note(text, label = '요청') {
 
 function gitCommit(push, quiet = false) {
   const say = (m) => { if (!quiet) console.log(m); };
-  const dir = logDir();
-  if (!dir.startsWith(SKILL_DIR)) {
-    if (quiet) return;
-    console.error(`기록이 저장소 밖에 있습니다: ${dir}\n` +
-                  '저장소에 커밋하려면 MERRY_WORKLOG_DIR를 비우고 다시 실행하세요.');
-    process.exit(1);
-  }
-  const rel = path.relative(SKILL_DIR, dir);
+  // 원본은 클론 밖에 있다. 올리기 직전에 저장소 안으로 복사한다.
+  const rel = path.relative(SKILL_DIR, publish());
   const run = (args) => execFileSync('git', args, { cwd: SKILL_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
   try {
@@ -199,6 +239,40 @@ function logFailure(what, err) {
     fs.appendFileSync(path.join(logDir(), '.sync-errors.log'),
       `${new Date().toISOString()} ${what} 실패: ${String(err.stderr || err.message).trim().split('\n')[0]}\n`);
   } catch { /* 여기서 또 실패하면 할 수 있는 게 없다 */ }
+}
+
+/**
+ * 쌓인 기록을 파일 하나로 묶어 낸다.
+ *
+ * push 권한이 없는 사람은 저장소로 올릴 수 없다. 그래도 기록은 남아 있어야 하고,
+ * 필요할 때 통째로 건네줄 수 있어야 한다. 슬랙에 첨부하거나 메일로 보내면 된다.
+ */
+function exportAll(outArg) {
+  const src = logDir();
+  const months = fs.readdirSync(src).filter((n) => /^\d{4}-\d{2}\.md$/.test(n)).sort();
+  if (!months.length) { console.log(`기록이 없습니다: ${src}`); return; }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const out = path.resolve((outArg || path.join(os.homedir(), 'Desktop', `merry-작업기록-${today}.md`))
+    .replace(/^~/, os.homedir()));
+
+  let runs = 0;
+  let notes = 0;
+  const parts = [];
+  for (const n of months) {
+    const body = fs.readFileSync(path.join(src, n), 'utf8');
+    runs += (body.match(/^### \d{2}:\d{2} (미리보기 생성|PPTX 생성)/gm) || []).length;
+    notes += (body.match(/^### \d{2}:\d{2} 요청/gm) || []).length;
+    parts.push(body.replace(/^# 작업 기록 /, '## '));
+  }
+
+  const head = `# Merry-slide 작업 기록\n\n` +
+    `- 뽑은 날: ${today}\n- 기간: ${months[0].replace('.md', '')} ~ ${months.at(-1).replace('.md', '')}\n` +
+    `- 실행 ${runs}회, 요청 ${notes}건\n- 원본 위치: ${src}\n\n---\n\n`;
+
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, head + parts.join('\n---\n\n'), 'utf8');
+  console.log(`${out}\n실행 ${runs}회 / 요청 ${notes}건 / ${months.length}개월치를 묶었습니다.`);
 }
 
 /**
@@ -267,6 +341,8 @@ function cli() {
     console.log(logDir());
   } else if (cmd === 'commit') {
     gitCommit(rest.includes('--push'), rest.includes('--quiet'));
+  } else if (cmd === 'export') {
+    exportAll(rest.find((r) => !r.startsWith('--')));
   } else if (cmd === 'setup') {
     gitSetup(rest.includes('--apply'));
   } else if (cmd === 'autocommit') {
@@ -283,10 +359,11 @@ function cli() {
   node scripts/worklog.mjs note "요청 원문"   요청을 기록한다
   node scripts/worklog.mjs show              이번 달 기록을 본다
   node scripts/worklog.mjs where             기록 위치를 확인한다
+  node scripts/worklog.mjs export [파일경로]  전체 기록을 파일 하나로 묶는다
   node scripts/worklog.mjs autocommit on|off 자동 커밋을 켜고 끈다
   node scripts/worklog.mjs commit [--push]   기록을 지금 커밋한다
 
-기록 위치: ${logDir()}
+기록 위치: ${logDir()}  (클론을 지워도 남습니다)
 자동 커밋: ${autoCommitOn() ? '켜짐' : '꺼짐'}
 위치를 바꾸려면: export MERRY_WORKLOG_DIR=~/merry-worklog`);
   }
