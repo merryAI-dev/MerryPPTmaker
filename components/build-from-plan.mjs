@@ -93,6 +93,8 @@ function parseArgs(argv) {
       args.images = value || ''; i += 1;
     } else if (key === '--drop-empty-figures') {
       args.dropEmpty = true;
+    } else if (key === '--brand') {
+      args.brand = value || ''; i += 1;
     } else {
       throw new Error(`알 수 없는 인자입니다: ${key}`);
     }
@@ -704,6 +706,12 @@ async function main() {
   if (args.help) {
     usage();
     return;
+  }
+  // 브랜드 주입은 다른 무엇보다 먼저다. T를 읽는 코드가 돌기 전에 바꿔야 한다.
+  if (args.brand) {
+    const { applyBrand } = await import('./brand.mjs');
+    const b = applyBrand(args.brand);
+    console.error(`브랜드 적용: ${b.name} (${b.file})`);
   }
   const planPath = discoverPlan(args.plan);
   if (!fs.existsSync(planPath)) {

@@ -81,6 +81,8 @@ function parseArgs(argv) {
       args.leadMax = Number.parseInt(value, 10); i += 1;
     } else if (key === '--images') {
       args.images = value || ''; i += 1;
+    } else if (key === '--brand') {
+      args.brand = value || ''; i += 1;
     } else if (key === '--serve') {
       args.serve = true;
     } else if (key === '--port') {
@@ -177,7 +179,7 @@ function buildHtml(plan, args, gallery) {
   .stagenav.right { right:20px; }
 
   /* ── 실제 슬라이드: A4 가로 11.693 x 8.267in, 96dpi 기준. pt/in 단위 그대로 사용 ── */
-  .slide { position:absolute; top:0; left:0; width:11.693in; height:8.267in; background:#fff;
+  .slide { position:absolute; top:0; left:0; width:${T.canvas.w}in; height:${T.canvas.h}in; background:#fff;
            transform-origin:top left; font-family:Pretendard,"Apple SD Gothic Neo",sans-serif;
            overflow:hidden; box-shadow:0 1px 4px #0002; }
   .slide .band { position:absolute; inset:0 0 auto 0; height:.794in;
@@ -808,18 +810,18 @@ function fitMinis() {
   document.querySelectorAll('#picker .mini').forEach(box => {
     const inner = box.firstElementChild;
     if (!inner) return;
-    const scale = box.clientWidth / (11.693 * 96);
+    const scale = box.clientWidth / (${T.canvas.w} * 96);
     inner.style.transform = 'scale(' + scale + ')';
-    box.style.height = (8.267 * 96 * scale) + 'px';
+    box.style.height = (${T.canvas.h} * 96 * scale) + 'px';
   });
 }
 
 function fit() {
   const holder = $('holder'), slide = $('slide');
   const w = holder.clientWidth;
-  const scale = w / (11.693 * 96);
+  const scale = w / (${T.canvas.w} * 96);
   slide.style.transform = 'scale(' + scale + ')';
-  holder.style.height = (8.267 * 96 * scale) + 'px';
+  holder.style.height = (${T.canvas.h} * 96 * scale) + 'px';
 }
 
 function render() {
@@ -1239,8 +1241,14 @@ render();
 `;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // 브랜드 주입은 buildHtml이 T를 읽기 전에 끝나야 한다.
+  if (args.brand) {
+    const { applyBrand } = await import('../components/brand.mjs');
+    const b = applyBrand(args.brand);
+    console.error(`브랜드 적용: ${b.name}`);
+  }
   if (args.help) {
     usage();
     return;
@@ -1387,9 +1395,7 @@ function serve(html, args, outPath, gallery = []) {
   });
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error(`preview-composition.mjs: ${error.message}`);
   process.exit(1);
-}
+});

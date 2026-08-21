@@ -132,10 +132,19 @@ export function applyLayout(pptx) {
 export function coverSlide(pptx, { year, title, subtitle, entity, variant = 'blue' } = {}) {
   const slide = pptx.addSlide();
   slide.background = { color: T.color.navy };
-  slide.addImage({
-    path: path.join(ASSET_DIR, `cover-gradient-${variant}.jpg`),
-    x: 0, y: 0, w: T.canvas.w, h: T.canvas.h,
-  });
+  if (T.cover && T.cover.image === false) {
+    // 브랜드 팩 모드: MYSC 그라디언트 이미지가 없으므로 팔레트로 그린다.
+    // 단색 배경 + 하단 accent 바. 장식을 발명하지 않는 최소 구성이다.
+    slide.addShape('rect', {
+      x: 0, y: T.canvas.h - 0.12, w: T.canvas.w, h: 0.12,
+      fill: { color: T.cover.accent }, line: { type: 'none' },
+    });
+  } else {
+    slide.addImage({
+      path: path.join(ASSET_DIR, `cover-gradient-${variant}.jpg`),
+      x: 0, y: 0, w: T.canvas.w, h: T.canvas.h,
+    });
+  }
 
   if (year || title) {
     slide.addText(
@@ -182,10 +191,17 @@ export function coverSlide(pptx, { year, title, subtitle, entity, variant = 'blu
 export function sectionDivider(pptx, { numeral, title, items = [] } = {}) {
   const slide = pptx.addSlide();
   slide.background = { color: T.color.navy };
-  slide.addImage({
-    path: path.join(ASSET_DIR, 'cover-gradient-blue.jpg'),
-    x: 0, y: 0, w: T.canvas.w, h: T.canvas.h,
-  });
+  if (T.cover && T.cover.image === false) {
+    slide.addShape('rect', {
+      x: 0, y: T.canvas.h - 0.12, w: T.canvas.w, h: 0.12,
+      fill: { color: T.cover.accent }, line: { type: 'none' },
+    });
+  } else {
+    slide.addImage({
+      path: path.join(ASSET_DIR, 'cover-gradient-blue.jpg'),
+      x: 0, y: 0, w: T.canvas.w, h: T.canvas.h,
+    });
+  }
 
   if (numeral) {
     slide.addText(`${numeral}.`, {
