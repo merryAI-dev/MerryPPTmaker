@@ -194,6 +194,30 @@ export function note(text, label = '요청') {
 
 function gitCommit(push, quiet = false) {
   const say = (m) => { if (!quiet) console.log(m); };
+
+  // 이미 다른 커밋/리베이스가 진행 중이면 절대 끼어들지 않는다.
+  // 실제 사고: 빌드가 연달아 돌며 자동 커밋 여러 개가 동시에 떠서 서로의
+  // rebase에 끼어들었고, autostash 복원이 밀리며 작업 중이던 코드가 사라졌다.
+  if (fs.existsSync(path.join(SKILL_DIR, '.git', 'rebase-merge')) ||
+      fs.existsSync(path.join(SKILL_DIR, '.git', 'rebase-apply'))) {
+    say('git이 리베이스 중이라 이번 기록 커밋은 건너뜁니다.');
+    return;
+  }
+  const lock = path.join(os.homedir(), '.merry-slide', 'commit.lock');
+  try {
+    const age = Date.now() - fs.statSync(lock).mtimeMs;
+    if (age < 5 * 60 * 1000) { say('다른 기록 커밋이 진행 중이라 건너뜁니다.'); return; }
+  } catch { /* 잠금 없음 - 정상 */ }
+  try { fs.mkdirSync(path.dirname(lock), { recursive: true }); fs.writeFileSync(lock, String(process.pid)); } catch { /* 못 잠가도 진행 */ }
+
+  try {
+    gitCommitLocked(push, say, quiet);
+  } finally {
+    try { fs.unlinkSync(lock); } catch { /* 이미 없음 */ }
+  }
+}
+
+function gitCommitLocked(push, say, quiet) {
   // 원본은 클론 밖에 있다. 올리기 직전에 저장소 안으로 복사한다.
   const rel = path.relative(SKILL_DIR, publish());
   const run = (args) => execFileSync('git', args, { cwd: SKILL_DIR, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -213,9 +237,15 @@ function gitCommit(push, quiet = false) {
 
   if (!push) return;
   try {
-    // 사이에 다른 커밋이 올라왔을 수 있다. 기록 커밋 하나 때문에 충돌로 멈추지 않게 한다.
-    try { run(['pull', '--rebase', '--autostash', 'origin', 'HEAD']); }
-    catch { /* 실패하면 그대로 push를 시도하고, 거기서 걸리면 아래에서 잡는다 */ }
+    // 작업 트리에 코드 변경이 있으면 rebase를 하지 않는다. --autostash가 작업 중인
+    // 파일을 숨겼다 복원하는데, 충돌이 나면 복원이 밀리며 편집을 잃는다(실제 사고).
+    // 기록 몇 개 늦게 올라가는 것보다 작업물이 무사한 것이 훨씬 중요하다.
+    const dirty = run(['status', '--porcelain']).split('\n')
+      .filter((l) => l.trim() && !l.includes('worklog/')).length > 0;
+    if (!dirty) {
+      try { run(['pull', '--rebase', 'origin', 'HEAD']); }
+      catch { /* 실패하면 그대로 push를 시도하고, 거기서 걸리면 아래에서 잡는다 */ }
+    }
     run(['push', 'origin', 'HEAD']);
     say('푸시했습니다.');
   } catch (err) {
