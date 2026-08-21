@@ -150,8 +150,8 @@ function buildHtml(plan, args, gallery) {
 <meta charset="utf-8">
 <title>${String(deckTitle).replace(/[<&]/g, '')}</title>
 <style>
-  :root { --navy:#0C2044; --navy-deep:#001D45; --navy-mid:#01397E; --cyan:#59C2E2;
-          --cyan-label:#5BBEDE; --tint:#BAE8FB; --tint-strong:#BEE6FB; --rule:#001521;
+  :root { --navy:#${T.color.navy}; --navy-deep:#${T.color.navyDeep}; --navy-mid:#${T.color.navyMid}; --cyan:#${T.color.cyan};
+          --cyan-label:#${T.color.cyanLabel}; --tint:#${T.color.cyanTint}; --tint-strong:#${T.color.cyanTintStrong}; --rule:#${T.color.rule};
           --line:#dbe1ea; --ink:#1a2233; --mute:#6b7688; }
   * { box-sizing:border-box; }
   body { margin:0; padding:20px 24px 28px; background:#eef1f6; color:var(--ink);
@@ -183,7 +183,7 @@ function buildHtml(plan, args, gallery) {
            transform-origin:top left; font-family:Pretendard,"Apple SD Gothic Neo",sans-serif;
            overflow:hidden; box-shadow:0 1px 4px #0002; }
   .slide .band { position:absolute; inset:0 0 auto 0; height:.794in;
-                 background:linear-gradient(90deg,#091823,var(--navy)); }
+                 background:linear-gradient(90deg,#${T.color.headerBandFrom},#${T.color.headerBandTo}); }
   .slide .sec  { position:absolute; left:.657in; top:.42in; width:2.2in; height:.328in;
                  color:#fff; font-size:15pt; font-weight:700; display:flex; align-items:center; }
   .slide .subl { position:absolute; left:2.928in; top:.456in; width:5.431in; height:.336in;
@@ -272,7 +272,9 @@ function buildHtml(plan, args, gallery) {
 
   .slide.cover { background:var(--navy); }
   .slide.cover .cbg { position:absolute; inset:0;
-      background:linear-gradient(160deg,#071426 0%,#0d2f5e 30%,#1e7fa8 62%,#bfe6ef 88%,#eaf6f8 100%); }
+      background:${T.cover && T.cover.image === false
+        ? `#${T.cover.base}; border-bottom:.12in solid #${T.cover.accent}`
+        : 'linear-gradient(160deg,#071426 0%,#0d2f5e 30%,#1e7fa8 62%,#bfe6ef 88%,#eaf6f8 100%)'}; }
   .slide.cover h2 { position:absolute; left:.578in; top:.5in; width:7in; margin:0;
                     font-size:34pt; font-weight:700; color:#fff; line-height:1.28; }
   .slide.cover .csub { position:absolute; left:7.3in; top:.55in; width:3.8in; color:#fff;
@@ -283,7 +285,9 @@ function buildHtml(plan, args, gallery) {
                        background:#fff9; border-radius:.05in; display:flex; align-items:center;
                        justify-content:center; font-size:13pt; font-weight:800; color:var(--navy);
                        letter-spacing:.02in; }
-  .slide.divider { background:linear-gradient(160deg,#071426,#0d2f5e 55%,#1a6f96); }
+  .slide.divider { background:${T.cover && T.cover.image === false
+        ? `#${T.cover.base}; border-bottom:.12in solid #${T.cover.accent}`
+        : 'linear-gradient(160deg,#071426,#0d2f5e 55%,#1a6f96)'}; }
   .slide.divider .num { position:absolute; left:.6in; top:.2in; font-size:150pt; color:#ffffff2e;
                         font-weight:200; line-height:1; }
   .slide.divider h2 { position:absolute; left:5.8in; top:.9in; width:5.4in; margin:0;
