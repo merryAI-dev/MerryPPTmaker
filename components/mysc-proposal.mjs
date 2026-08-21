@@ -171,16 +171,22 @@ export function coverSlide(pptx, { year, title, subtitle, entity, variant = 'blu
   }
 
   if (entity) {
+    // MYSC 표지는 하단이 밝은 그라디언트라 navy 글씨가 보이지만,
+    // 브랜드 팩 표지는 배경 전체가 primary 단색이라 navy면 배경에 묻힌다.
+    const entityColor = (T.cover && T.cover.image === false) ? T.color.white : T.color.navy;
     slide.addText(entity, {
       x: 0.578, y: 7.245, w: 4.595, h: 0.337,
-      fontFace: T.font.family, fontSize: 14, bold: true, color: T.color.navy, margin: 0,
+      fontFace: T.font.family, fontSize: 14, bold: true, color: entityColor, margin: 0,
     });
   }
 
-  slide.addImage({
-    path: path.join(ASSET_DIR, 'mysc-logo.png'),
-    x: 9.067, y: 7.094, w: 2.122, h: 0.583,
-  });
+  // 로고는 MYSC 톤 전용이다. 브랜드 팩 모드에서 남의 덱에 MYSC 로고를 찍으면 안 된다.
+  if (!(T.cover && T.cover.image === false)) {
+    slide.addImage({
+      path: path.join(ASSET_DIR, 'mysc-logo.png'),
+      x: 9.067, y: 7.094, w: 2.122, h: 0.583,
+    });
+  }
 
   return slide;
 }
