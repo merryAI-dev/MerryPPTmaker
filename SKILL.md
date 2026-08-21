@@ -202,7 +202,30 @@ stage가 애매하면 짧게 한 번만 묻는다. 추천 옵션은 항상 `Auto
 python3 scripts/extract-brand.py 레퍼런스.pptx --name acme --out references/brands
 ```
 
-추출 결과의 `needs_check`를 사용자에게 그대로 전달하고, `tokens.md`를 CP2에서 확인받은 뒤 쓴다. 자동 추출은 강조색과 금지 패턴을 자주 틀리므로 확정 없이 다음 stage로 넘어가지 않는다.
+### 새 브랜드 온보딩: 문서가 아니라 화면으로 확인받는다
+
+추출이 끝나면 `tokens.md`를 채팅에 나열하지 말고 확인 화면을 만들어 브라우저로 보여준다.
+
+```bash
+node scripts/onboard-brand.mjs --brand acme --out onboard.html
+```
+
+화면에 나오는 것: ① 폰트 — 이 컴퓨터에 설치됐는지 브라우저가 직접 판정하고, 미설치면
+대체 글꼴로 보인다는 사실과 설치 안내를 띄운다 ② 팔레트 — 주 색상/강조/표 헤더 역할
+배정 ③ 표지·간지·본문 골격 — 이 브랜드로 만들면 나올 실제 모습의 축소판 ④ 추출기가
+확신하지 못한 항목.
+
+사용자가 "맞아"라고 하면 CP2 통과다. "강조색이 반대야" 같은 지적이 오면 brand.json을
+고치고 화면을 다시 만들어 보여준다. **화면 확인 없이 다음 stage로 넘어가지 않는다.**
+자동 추출은 강조색과 금지 패턴을 자주 틀리고, 그게 틀렸는지는 그 팀 사람만 안다.
+
+확정된 브랜드는 이후 모든 명령에 `--brand acme`로 넘긴다. 프리뷰와 빌더가 같은 토큰을
+주입받으므로 캔버스 비율(16:9든 A4든)과 색이 끝까지 일치한다.
+
+```bash
+node scripts/preview-composition.mjs --plan slide_plan.json --brand acme --serve ...
+node components/build-from-plan.mjs --plan ... --brand acme --out deck.pptx
+```
 
 레퍼런스가 아예 없으면 `references/composition-format.md`의 기본 형식을 쓰되 사용자에게 알린다.
 

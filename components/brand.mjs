@@ -57,11 +57,14 @@ function deriveColors(brand) {
 
   // primary: 도형 fill 최빈 유채색. 없으면 텍스트 최빈 유채색.
   const primary = fills[0]?.hex || texts[0]?.hex || T.color.navy;
-  // accent: primary와 다른 다음 후보.
+  // accent: primary와 다른 다음 후보. 없으면 표 헤더 색이 그 브랜드의 두 번째
+  // 색인 경우가 많다(예: 그린 브랜드의 라임 헤더). 그것도 없으면 primary.
+  const headFill = isHex(brand.table?.headFill) ? brand.table.headFill : '';
   const accent =
-    [...texts, ...fills].map((c) => c.hex).find((h) => h !== primary) || primary;
+    [...texts, ...fills].map((c) => c.hex).find((h) => h !== primary) ||
+    (isChromatic(headFill) && headFill !== primary ? headFill : primary);
   // 표 헤더 fill 실측이 있으면 tint로 쓴다.
-  const tint = isHex(brand.table?.headFill) ? brand.table.headFill : accent;
+  const tint = headFill || accent;
 
   return {
     ...T.color,
