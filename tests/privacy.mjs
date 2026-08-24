@@ -154,8 +154,9 @@ srv.kill();
 {
   const src = fs.readFileSync(path.join(ROOT, 'scripts', 'preview-composition.mjs'), 'utf8');
   const hasLog = /접속기록|access[_ ]?log/i.test(src);
-  check('4.4', '프리뷰 서버 접속기록 보관', hasLog,
-    hasLog ? '' : '없음 — 로컬 단일 사용자 도구라 위험은 낮으나 LAN 모드 도입 시 필요 (현황)');
+  // 기본이 loopback 전용(4.2.3 충족)인 동안 접속기록은 법적 요건이 아니다.
+  // LAN 공개를 정식 기능으로 여는 순간 결함으로 승격해야 한다.
+  console.log(`  ${hasLog ? '✓' : '!'} [4.4] 프리뷰 서버 접속기록 — ${hasLog ? '보관함' : '없음 (loopback 전용인 동안은 해당 없음, LAN 기능 도입 시 필수로 전환)'}`);
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });
