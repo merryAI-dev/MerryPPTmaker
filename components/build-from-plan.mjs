@@ -421,7 +421,9 @@ function tableSlide(pptx, slide, c, PT, CT, slideNo) {
 function diagramSlide(pptx, slide, c, PT, CT, slideNo) {
   const flow = c.flow || [];
   pill(pptx, slide, c.pill, L.full.x, PT, L.full.w);
-  const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.flow : Number.POSITIVE_INFINITY, Boolean(c.note));
+  // 이미지 띠가 없어도 flow 박스를 바닥까지 늘리지 않는다. 두 줄짜리 내용이
+  // 5in 박스에 떠 있으면 '도형 속이 텅 빔' 결함이 된다.
+  const sp = splitBody(CT, bandWanted(figuresOf(c)) ? L.natural.flow : L.natural.flowMax, Boolean(c.note));
   const flowH = sp.h;
 
   if (flow.length) {

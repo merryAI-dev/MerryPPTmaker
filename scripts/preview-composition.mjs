@@ -745,7 +745,7 @@ function renderSlide(s, i) {
     const boxes = fl.map((b, k) =>
       (k ? '<span class="farrow">›</span>' : '') +
       '<div class="fbox"><b>' + esc(b.head) + '</b><p>' + lines(b.body) + '</p></div>').join('');
-    const sp = splitBody(CT, G.natural.flow, !!c.note);
+    const sp = splitBody(CT, bandWanted(figuresOf(c)) ? G.natural.flow : G.natural.flowMax, !!c.note);
     const flowH = sp.h;
     inner += pillDiv(c.pill, 'left:.649in;top:' + PT + 'in;width:10.37in') +
       '<div class="flow" style="left:.649in;top:' + CT + 'in;width:10.37in;height:' + flowH + 'in">' + boxes + '</div>' +
