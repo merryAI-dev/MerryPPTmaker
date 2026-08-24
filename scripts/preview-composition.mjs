@@ -63,7 +63,7 @@ function usage() {
 
 function parseArgs(argv) {
   const args = { plan: 'slide_plan.json', out: DEFAULT_OUT, title: '', leadMin: 150, leadMax: 200,
-                 images: '', serve: false, port: 18888, pptx: '' };
+                 images: '', serve: false, port: 18888, pptx: '', lan: false };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
@@ -83,6 +83,8 @@ function parseArgs(argv) {
       args.images = value || ''; i += 1;
     } else if (key === '--brand') {
       args.brand = value || ''; i += 1;
+    } else if (key === '--lan') {
+      args.lan = true;
     } else if (key === '--serve') {
       args.serve = true;
     } else if (key === '--port') {
@@ -1386,10 +1388,21 @@ function serve(html, args, outPath, gallery = []) {
       });
       return;
     }
+    // 검토 화면은 루트에서만 준다. 그 외 경로에 200을 주면 스캐너가 파일을
+    // 캐내려는 시도에도 정상 응답처럼 보인다. 실제 파일 유출은 없지만 위생상 404.
+    const reqPath = (req.url || '/').split('?')[0];
+    if (reqPath !== '/' && reqPath !== '/index.html') {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+      return;
+    }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(html);
-  }).listen(args.port, () => {
+  }).listen(args.port, args.lan ? '0.0.0.0' : '127.0.0.1', () => {
     console.log(`검토 화면: http://localhost:${args.port}  (PPTX 생성을 누르면 ${pptxPath} 로 바로 만들어집니다)`);
+    if (args.lan) {
+      console.log('주의: --lan 모드입니다. 같은 네트워크의 다른 기기에서도 이 화면과 사진에 접근할 수 있습니다.');
+    }
   });
 
   // 검토 중에 서버가 내려가면 작업하던 내용을 잃는다. 어떤 예외도 프로세스를
