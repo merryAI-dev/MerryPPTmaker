@@ -632,6 +632,44 @@ function adaptContent(c, target) {
   if (target === '표지' && !c.subtitle) {
     c.subtitle = c.intro || '';
   }
+  return prune(c, target);
+}
+
+/**
+ * 형식이 바뀌면 이전 형식의 데이터를 본문에서 치운다.
+ *
+ * 치우지 않으면 표 중심 슬라이드에 steps와 chart가 남고, 다른 형식에서 만들어진
+ * pill이 그대로 그려진다. 확정 JSON도 쓰지 않는 값으로 불어난다.
+ * 다만 지우지는 않고 _keep에 옮겨 두었다가, 그 형식으로 되돌아오면 되살린다.
+ * 41행짜리 표를 만들어 둔 뒤 다른 형식을 눌러 봤다고 표가 사라지면 안 된다.
+ */
+const FORMAT_KEYS = {
+  '표지': ['subtitle', 'entity'],
+  '목차': ['items'],
+  '간지': ['numeral', 'items'],
+  '좌우 2단': ['left', 'right'],
+  '표 중심': ['table', 'pill'],
+  '전폭 도식': ['flow', 'pill'],
+  '숫자 강조': ['stats', 'pill'],
+  '단계 흐름': ['steps', 'pill'],
+  '차트': ['chart', 'pill'],
+};
+// 형식과 무관하게 늘 남는 값
+const SHARED_KEYS = ['label', 'section', 'intro', 'introOptions', 'note', 'figure', 'figures'];
+
+function prune(c, target) {
+  const keep = new Set([...(FORMAT_KEYS[target] || []), ...SHARED_KEYS]);
+  const stash = c._keep || {};
+  for (const k of Object.keys(c)) {
+    if (k === '_keep' || keep.has(k)) continue;
+    stash[k] = c[k];
+    delete c[k];
+  }
+  // 되돌아온 형식의 값이 보관돼 있으면 복원한다.
+  for (const k of (FORMAT_KEYS[target] || [])) {
+    if (c[k] === undefined && stash[k] !== undefined) { c[k] = stash[k]; delete stash[k]; }
+  }
+  if (Object.keys(stash).length) c._keep = stash; else delete c._keep;
   return c;
 }
 
@@ -1159,6 +1197,7 @@ function packConfirmed() {
   packed.forEach(s => {
     delete s._id;
     const c = s.content || {};
+    delete c._keep;   // 형식 전환 중 보관해 둔 값은 산출물에 넣지 않는다
     [...(c.figures || []), c.figure, (c.left || {}).figure, (c.right || {}).figure]
       .filter(f => f && f.data)
       .forEach(f => {
