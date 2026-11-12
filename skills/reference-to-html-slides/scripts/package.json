@@ -1,0 +1,6 @@
+{
+  "name": "reference-to-html-slides-skill",
+  "private": true,
+  "engines": {"node": ">=20"},
+  "dependencies": {"playwright": "1.62.1", "sharp": "0.35.5"}
+}

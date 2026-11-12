@@ -5,6 +5,16 @@ description: Use when building a presentation deck in stages from reference link
 
 # Merry-slide
 
+## HTML 및 Google Slides 경로
+
+기존 HTML 슬라이드를 편집 가능한 PPTX로 변환하거나 HTML 레퍼런스를 정교하게 재현할 때는 다음 동봉 스킬을 읽는다.
+
+- [reference-to-html-slides](skills/reference-to-html-slides/SKILL.md) — HTML·PPTX·PDF·이미지 레퍼런스에서 디자인을 측정하고 HTML을 제작·비교한다.
+- [html-to-pptx](skills/html-to-pptx/SKILL.md) — 브라우저에서 측정한 텍스트를 네이티브 텍스트로, 그래픽을 SVG와 실데이터 PNG fallback으로 변환하고 Google Slides에서 검증한다.
+
+이 경로의 도형은 개별 PowerPoint 도형이 아닌 SVG 이미지 객체일 수 있다. Google Slides에서는 PNG fallback으로 변환될 수 있다. 글자는 편집 가능하게 유지하되, 모든 요소가 네이티브 도형이거나 원본과 픽셀 단위로 같다고 약속하지 않는다. 전체 네이티브 도형 편집이 필요하면 아래 Native 경로를 따른다. 사용자가 HTML 변환을 요청하면 이 경로를 우선한다.
+
+
 Merry-slide는 단계형 발표자료 제작 워크플로우다. 레퍼런스 자료와 원본 콘텐츠를 받아 아래 파이프라인으로 처리한다.
 
 `intake -> design -> plan -> build -> package`
@@ -20,7 +30,7 @@ Stage 0~3과 Stage 5는 두 트랙이 공통이며 실행 환경을 가리지 �
 
 **Claude에서 실행 중이면 Native 트랙만 쓴다.** Claude Code에는 이미지 생성 도구가 없다. 사용자가 raster 이미지 덱을 원하면 그 사실을 먼저 알리고, Native 트랙으로 대신할지 묻는다.
 
-HTML/CSS로 슬라이드를 그려 PNG로 렌더하는 우회로를 시도하지 않는다. 산출물이 결국 이미지라서 PowerPoint에서 텍스트 수정, 크기 조절, 배경 정리가 모두 막힌다. Raster의 약점을 그대로 가지면서 Native의 장점은 못 얻는다.
+텍스트 편집이 필요한 요청에서 HTML/CSS 페이지 전체를 PNG 한 장으로 평탄화하지 않는다. HTML 경로는 위 동봉 스킬의 네이티브 텍스트 + 벡터 그래픽 변환을 사용한다. 산출물이 결국 이미지라서 PowerPoint에서 텍스트 수정, 크기 조절, 배경 정리가 모두 막힌다. Raster의 약점을 그대로 가지면서 Native의 장점은 못 얻는다.
 
 보고서·제안서처럼 표와 수치가 많은 덱은 실행 환경과 무관하게 Native 트랙이 낫다.
 
