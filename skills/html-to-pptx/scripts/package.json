@@ -1,0 +1,10 @@
+{
+  "name": "html-to-pptx-skill",
+  "private": true,
+  "engines": {"node": ">=20"},
+  "dependencies": {
+    "playwright": "1.62.1",
+    "pptxgenjs": "4.0.1",
+    "sharp": "0.35.5"
+  }
+}

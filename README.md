@@ -107,3 +107,15 @@ MYSC 본문 슬라이드에는 150–200자 리드 문단이 항상 들어갑니
 - 글의 품질은 사람 손이 필요합니다. 리드 문단이 길이를 못 채우면 일반적인 문장이 붙는데, 읽으면 티가 납니다. 초안 수준입니다.
 - 브랜드 자동 추출은 MYSC 외 다른 브랜드로 실전 검증 전입니다.
 - 사진이 많은 폴더는 `--serve`로 띄워야 합니다.
+
+## HTML 레퍼런스 → 편집 가능한 PPTX → Google Slides
+
+`skills/reference-to-html-slides`와 `skills/html-to-pptx`를 각각 Claude Code의 `~/.claude/skills/` 또는 Codex의 `~/.codex/skills/`에 복사해 사용할 수 있습니다. 루트 스킬에서도 두 경로를 안내합니다.
+
+- 실제 DOM 텍스트 좌표와 SVG geometry를 측정하고 글자는 PowerPoint 텍스트로 생성합니다.
+- 그래픽은 SVG와 실데이터 PNG fallback을 함께 저장합니다. Google import는 그래픽을 래스터화할 수 있습니다.
+- 원본·PPTX·PNG fallback·실제 Google 렌더링을 별도 검증합니다. Google PDF를 얻지 못하면 전체 페이지의 Google LARGE thumbnail을 비교합니다.
+- Google에서 생기는 폰트 대체, 재줄바꿈, Unicode 로마 숫자 표시 문제는 선택적으로 보정하고 재검증합니다.
+- 실제 텍스트 삽입, 렌더링, 원문 복원까지 확인합니다. 픽셀 오차가 있으면 완전 일치로 보고하지 않습니다.
+
+Node 20+, Python 3, Chromium, Poppler가 필요하고 로컬 PPTX 검증에는 LibreOffice가 필요합니다. 각 스킬의 `scripts`에서 `npm install` 후 `npx playwright install chromium`을 실행하세요. Google 연결 도구는 별도로 필요하며 공개 링크나 공유 권한을 자동으로 만들지 않습니다. 자세한 실행법은 각 스킬의 `references/workflow.md`에 있습니다.

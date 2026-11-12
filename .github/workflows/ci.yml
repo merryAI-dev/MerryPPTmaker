@@ -33,3 +33,9 @@ jobs:
 
       - name: 개인정보 보호 테스트
         run: node tests/privacy.mjs
+
+      - name: HTML conversion skill dependencies
+        run: npm ci --prefix skills/html-to-pptx/scripts
+
+      - name: HTML conversion regression tests
+        run: node tests/html-skills.cjs
